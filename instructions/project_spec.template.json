@@ -1,0 +1,78 @@
+{
+  "schema_version": "0.1",
+  "status": "TEMPLATE_INCOMPLETE",
+  "scope": "static_lattice_candidate_ranking",
+  "project_id": null,
+  "source_structures": [],
+  "candidate_topology_ids": [],
+  "building_blocks": [],
+  "chemistry": {
+    "target_elemental_inventory": null,
+    "formula_unit": null,
+    "composition_by_sublattice": null,
+    "oxidation_and_protonation_policy": null,
+    "net_charge": null,
+    "solvent_and_counterion_policy": null,
+    "magnetic_state_policy": null
+  },
+  "search": {
+    "supercell_matrices": [],
+    "orientation_catalog_id": null,
+    "symmetry_policy_id": null
+  },
+  "protocols": {
+    "builder": null,
+    "ml_potential_checkpoint": null,
+    "ml_calibration": null,
+    "dft": null,
+    "embedding": null,
+    "active_space": null,
+    "model_selection": null,
+    "encoding": null,
+    "classical_solvers": [],
+    "quantum_solvers": [],
+    "acquisition": null,
+    "validation": null,
+    "stopping": null
+  },
+  "tolerances": {
+    "energy_units": "eV_per_common_formula_unit",
+    "target_relative_energy_tolerance": null,
+    "force_tolerance_eV_per_angstrom": null,
+    "stress_tolerance_and_units": null,
+    "low_energy_validation_criterion": null,
+    "consecutive_stable_rounds": null
+  },
+  "budgets": {
+    "max_dft_jobs": null,
+    "max_active_space_jobs": null,
+    "max_qpu_shots": null,
+    "max_cpu_core_hours": null,
+    "max_gpu_hours": null,
+    "max_llm_calls": null,
+    "max_total_cost_currency_and_value": null
+  },
+  "runtime": {
+    "engine": "aiida_recommended",
+    "llm_provider": null,
+    "llm_model": null,
+    "allowed_tools_by_role": {
+      "structure": [],
+      "model_search": [],
+      "electronic": [],
+      "reviewer": []
+    },
+    "scientific_protocol_changes_require_new_version": true
+  },
+  "deliverables": [
+    "structures",
+    "compatible_energy_table",
+    "validation_reports",
+    "search_coverage",
+    "reproducibility_manifest"
+  ],
+  "excluded_scope": [
+    "finite_temperature_ensembles",
+    "quantum_mcmc"
+  ]
+}
