@@ -1,0 +1,1288 @@
+{
+  "case": "core_pairwise",
+  "correction": "none",
+  "note": "Reference algorithm only; no atomic construction, DFT, embedding or quantum circuit is executed.",
+  "pooled_winner": "prism6",
+  "provenance": "SYNTHETIC",
+  "ranked_pool": [
+    {
+      "base_energy_eV": -0.16,
+      "bits": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.16,
+      "orbit_id": "prism6:010101101010",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.12,
+      "bits": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.12,
+      "orbit_id": "ring12:010101010101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010101011",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010101101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010110101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.032,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.032,
+      "orbit_id": "prism6:000101111010",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.032,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.032,
+      "orbit_id": "prism6:001011010101",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.016,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.016,
+      "orbit_id": "ring12:000101010111",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.016,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.016,
+      "orbit_id": "ring12:000101011101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.008,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.008,
+      "orbit_id": "prism6:001001110110",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.008,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "corrected_energy_eV": -0.008,
+      "orbit_id": "prism6:001011110100",
+      "topology_id": "prism6"
+    }
+  ],
+  "runtime_agents_enabled": false,
+  "topologies": {
+    "prism6": {
+      "base_model_encoding": "QUBO",
+      "correction_application": "post-solve synthetic score; not compiled into base QUBO",
+      "ground_state_orbits": [
+        "prism6:010101101010"
+      ],
+      "minimizing_bitstrings": [
+        "010101101010",
+        "101010010101"
+      ],
+      "minimum_energy_eV": -0.16,
+      "minimum_scope": "exhaustive corrected reference over all legal states",
+      "model_candidates": [
+        {
+          "coefficients_exact": [
+            "51589/166250",
+            "-761/33250"
+          ],
+          "development_rmse_eV": 0.023759873984011512,
+          "indices": [
+            0,
+            1
+          ],
+          "model": "M0_nearest_pairs",
+          "n_parameters": 2,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "1/5",
+            "-1/50",
+            "3/500"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "model": "M1_two_shell_pairs",
+          "n_parameters": 3,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "1/5",
+            "-1/50",
+            "3/500",
+            "0"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "model": "M2_pairs_and_triplets",
+          "n_parameters": 4,
+          "status": "OK"
+        }
+      ],
+      "n_feasible": 924,
+      "n_symmetry_orbits": 55,
+      "qubo": {
+        "bit_order": "bits[i] is site i; string leftmost character is site 0",
+        "constant_eV": 36.2,
+        "format": "upper_triangle_once",
+        "linear_eV": [
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036,
+          -11.036
+        ],
+        "objective": "physical_cell_energy + lambda*(sum(bits)-6)^2",
+        "penalty_eV": 1.0,
+        "physical_offset_eV": 0.2,
+        "provenance": "SYNTHETIC",
+        "quadratic_eV": [
+          {
+            "i": 0,
+            "j": 1,
+            "value": 2.04
+          },
+          {
+            "i": 0,
+            "j": 2,
+            "value": 1.988
+          },
+          {
+            "i": 0,
+            "j": 3,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 4,
+            "value": 1.988
+          },
+          {
+            "i": 0,
+            "j": 5,
+            "value": 2.04
+          },
+          {
+            "i": 0,
+            "j": 6,
+            "value": 2.04
+          },
+          {
+            "i": 0,
+            "j": 7,
+            "value": 1.988
+          },
+          {
+            "i": 0,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 2,
+            "value": 2.04
+          },
+          {
+            "i": 1,
+            "j": 3,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 4,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 5,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 6,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 7,
+            "value": 2.04
+          },
+          {
+            "i": 1,
+            "j": 8,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 3,
+            "value": 2.04
+          },
+          {
+            "i": 2,
+            "j": 4,
+            "value": 1.988
+          },
+          {
+            "i": 2,
+            "j": 5,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 7,
+            "value": 1.988
+          },
+          {
+            "i": 2,
+            "j": 8,
+            "value": 2.04
+          },
+          {
+            "i": 2,
+            "j": 9,
+            "value": 1.988
+          },
+          {
+            "i": 2,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 4,
+            "value": 2.04
+          },
+          {
+            "i": 3,
+            "j": 5,
+            "value": 1.988
+          },
+          {
+            "i": 3,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 8,
+            "value": 1.988
+          },
+          {
+            "i": 3,
+            "j": 9,
+            "value": 2.04
+          },
+          {
+            "i": 3,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 3,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 5,
+            "value": 2.04
+          },
+          {
+            "i": 4,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 9,
+            "value": 1.988
+          },
+          {
+            "i": 4,
+            "j": 10,
+            "value": 2.04
+          },
+          {
+            "i": 4,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 5,
+            "j": 6,
+            "value": 1.988
+          },
+          {
+            "i": 5,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 5,
+            "j": 11,
+            "value": 2.04
+          },
+          {
+            "i": 6,
+            "j": 7,
+            "value": 2.04
+          },
+          {
+            "i": 6,
+            "j": 8,
+            "value": 1.988
+          },
+          {
+            "i": 6,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 6,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 6,
+            "j": 11,
+            "value": 2.04
+          },
+          {
+            "i": 7,
+            "j": 8,
+            "value": 2.04
+          },
+          {
+            "i": 7,
+            "j": 9,
+            "value": 1.988
+          },
+          {
+            "i": 7,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 7,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 8,
+            "j": 9,
+            "value": 2.04
+          },
+          {
+            "i": 8,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 8,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 9,
+            "j": 10,
+            "value": 2.04
+          },
+          {
+            "i": 9,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 10,
+            "j": 11,
+            "value": 2.04
+          }
+        ]
+      },
+      "selected_model": "M1_two_shell_pairs",
+      "selected_pool": [
+        {
+          "base_energy_eV": -0.16,
+          "bits": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.16,
+          "orbit_id": "prism6:010101101010"
+        },
+        {
+          "base_energy_eV": -0.032,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.032,
+          "orbit_id": "prism6:000101111010"
+        },
+        {
+          "base_energy_eV": -0.032,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.032,
+          "orbit_id": "prism6:001011010101"
+        },
+        {
+          "base_energy_eV": -0.008,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.008,
+          "orbit_id": "prism6:001001110110"
+        },
+        {
+          "base_energy_eV": -0.008,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          "corrected_energy_eV": -0.008,
+          "orbit_id": "prism6:001011110100"
+        }
+      ]
+    },
+    "ring12": {
+      "base_model_encoding": "QUBO",
+      "correction_application": "post-solve synthetic score; not compiled into base QUBO",
+      "ground_state_orbits": [
+        "ring12:010101010101"
+      ],
+      "minimizing_bitstrings": [
+        "010101010101",
+        "101010101010"
+      ],
+      "minimum_energy_eV": -0.12,
+      "minimum_scope": "exhaustive corrected reference over all legal states",
+      "model_candidates": [
+        {
+          "coefficients_exact": [
+            "3801/20525",
+            "-2417/102625"
+          ],
+          "development_rmse_eV": 0.013099340317875567,
+          "indices": [
+            0,
+            1
+          ],
+          "model": "M0_nearest_pairs",
+          "n_parameters": 2,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "3/25",
+            "-1/50",
+            "3/500"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "model": "M1_two_shell_pairs",
+          "n_parameters": 3,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "3/25",
+            "-1/50",
+            "3/500",
+            "0"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "model": "M2_pairs_and_triplets",
+          "n_parameters": 4,
+          "status": "OK"
+        }
+      ],
+      "n_feasible": 924,
+      "n_symmetry_orbits": 50,
+      "qubo": {
+        "bit_order": "bits[i] is site i; string leftmost character is site 0",
+        "constant_eV": 36.12,
+        "format": "upper_triangle_once",
+        "linear_eV": [
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028,
+          -11.028
+        ],
+        "objective": "physical_cell_energy + lambda*(sum(bits)-6)^2",
+        "penalty_eV": 1.0,
+        "physical_offset_eV": 0.12,
+        "provenance": "SYNTHETIC",
+        "quadratic_eV": [
+          {
+            "i": 0,
+            "j": 1,
+            "value": 2.04
+          },
+          {
+            "i": 0,
+            "j": 2,
+            "value": 1.988
+          },
+          {
+            "i": 0,
+            "j": 3,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 4,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 5,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 0,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 0,
+            "j": 11,
+            "value": 2.04
+          },
+          {
+            "i": 1,
+            "j": 2,
+            "value": 2.04
+          },
+          {
+            "i": 1,
+            "j": 3,
+            "value": 1.988
+          },
+          {
+            "i": 1,
+            "j": 4,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 5,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 1,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 2,
+            "j": 3,
+            "value": 2.04
+          },
+          {
+            "i": 2,
+            "j": 4,
+            "value": 1.988
+          },
+          {
+            "i": 2,
+            "j": 5,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 2,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 4,
+            "value": 2.04
+          },
+          {
+            "i": 3,
+            "j": 5,
+            "value": 1.988
+          },
+          {
+            "i": 3,
+            "j": 6,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 3,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 5,
+            "value": 2.04
+          },
+          {
+            "i": 4,
+            "j": 6,
+            "value": 1.988
+          },
+          {
+            "i": 4,
+            "j": 7,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 4,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 6,
+            "value": 2.04
+          },
+          {
+            "i": 5,
+            "j": 7,
+            "value": 1.988
+          },
+          {
+            "i": 5,
+            "j": 8,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 5,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 6,
+            "j": 7,
+            "value": 2.04
+          },
+          {
+            "i": 6,
+            "j": 8,
+            "value": 1.988
+          },
+          {
+            "i": 6,
+            "j": 9,
+            "value": 2.0
+          },
+          {
+            "i": 6,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 6,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 7,
+            "j": 8,
+            "value": 2.04
+          },
+          {
+            "i": 7,
+            "j": 9,
+            "value": 1.988
+          },
+          {
+            "i": 7,
+            "j": 10,
+            "value": 2.0
+          },
+          {
+            "i": 7,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 8,
+            "j": 9,
+            "value": 2.04
+          },
+          {
+            "i": 8,
+            "j": 10,
+            "value": 1.988
+          },
+          {
+            "i": 8,
+            "j": 11,
+            "value": 2.0
+          },
+          {
+            "i": 9,
+            "j": 10,
+            "value": 2.04
+          },
+          {
+            "i": 9,
+            "j": 11,
+            "value": 1.988
+          },
+          {
+            "i": 10,
+            "j": 11,
+            "value": 2.04
+          }
+        ]
+      },
+      "selected_model": "M1_two_shell_pairs",
+      "selected_pool": [
+        {
+          "base_energy_eV": -0.12,
+          "bits": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.12,
+          "orbit_id": "ring12:010101010101"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010101011"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010101101"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010110101"
+        },
+        {
+          "base_energy_eV": -0.016,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.016,
+          "orbit_id": "ring12:000101010111"
+        },
+        {
+          "base_energy_eV": -0.016,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.016,
+          "orbit_id": "ring12:000101011101"
+        }
+      ]
+    }
+  },
+  "winning_topology": "prism6"
+}

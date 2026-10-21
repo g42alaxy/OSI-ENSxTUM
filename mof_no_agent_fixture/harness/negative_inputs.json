@@ -1,0 +1,26 @@
+{
+  "occupation_cases": [
+    {"id":"wrong_ratio","bits":[1,1,1,1,1,1,1,0,0,0,0,0],"expected_error":"INVALID_COMPOSITION"},
+    {"id":"wrong_length","bits":[1,1,1,1,1,1,0,0,0,0,0],"expected_error":"INVALID_SITE_COUNT"},
+    {"id":"non_binary","bits":[2,1,1,1,1,1,0,0,0,0,0,0],"expected_error":"INVALID_BINARY_OCCUPATION"},
+    {"id":"boolean_is_not_integer_input","bits":[true,1,1,1,1,1,0,0,0,0,0,0],"expected_error":"INVALID_BINARY_OCCUPATION"}
+  ],
+  "energy_mutations": [
+    {"field":"energy_unit","value":"hartree","expected_error":"INCOMPATIBLE_ENERGY_UNIT"},
+    {"field":"normalization","value":"per_cell","expected_error":"INCOMPATIBLE_NORMALIZATION"},
+    {"field":"comparison_group","value":"different_composition","expected_error":"INCOMPATIBLE_COMPARISON_GROUP"},
+    {"field":"fidelity","value":"DFT","expected_error":"INCOMPATIBLE_FIDELITY"},
+    {"field":"status","value":"SCF_NOT_CONVERGED","expected_error":"NON_SUCCESSFUL_CALCULATION"},
+    {"field":"provenance","value":"REAL_CALCULATION","expected_error":"PROVENANCE_MISMATCH"}
+  ],
+  "normalization_cases": [
+    {"id":"ring_one_unit","total_energy_eV":-0.12,"n_formula_units":1,"expected_normalized_eV":-0.12},
+    {"id":"prism_two_units","total_energy_eV":-0.32,"n_formula_units":2,"expected_normalized_eV":-0.16}
+  ],
+  "higher_order_case": {
+    "input":"data/higher_order_training.jsonl",
+    "expected_model":"M2_pairs_and_triplets",
+    "plain_qubo_compilation":"UNSUPPORTED_HIGHER_ORDER_WITHOUT_QUADRATIZATION",
+    "note":"Triplet terms cannot be silently dropped. Exact enumeration can score the cubic model directly."
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "mode": "static_manifest",
+  "runtime_llm_required": false,
+  "review_status": "NOT_RUN",
+  "entries": [
+    {
+      "id": "mixed_mof5_2014",
+      "title": "Postsynthetic modification of mixed-linker metal–organic frameworks for ethylene oligomerization",
+      "year": 2014,
+      "doi": "10.1039/C4RA10605A",
+      "url": "https://pubs.rsc.org/en/content/articlehtml/2014/ra/c4ra10605a",
+      "supports": "The Zn4O/BDC/amino-BDC mixed-linker material family exists; linker incorporation ratios must be measured rather than equated to feed ratios.",
+      "does_not_supply": "A verified 50:50 atomistic input, the synthetic fixture energies, or a ground-state ordering benchmark for this fixture",
+      "usage": "Background for the optional physical-case recipe only; do not include the paper's later Ni functionalization"
+    },
+    {
+      "id": "pormake_repository",
+      "title": "PORMAKE official source repository",
+      "url": "https://github.com/Sangwon91/PORMAKE",
+      "supports": "A possible construction backend for the later atomic-structure stage",
+      "usage": "Resolve compatible building blocks and topology data in the actual installed version; no database block IDs are assumed here"
+    }
+  ],
+  "instructions": "A deterministic report may list these sources and their scope. It must not claim that a literature agent reviewed or validated the numerical results."
+}

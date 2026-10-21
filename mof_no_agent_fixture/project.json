@@ -1,0 +1,36 @@
+{
+  "schema": "mof_no_agent_fixture_v1",
+  "project_id": "synthetic_A6B6_v1",
+  "provenance": "SYNTHETIC",
+  "purpose": "Deterministic integration fixture; not an atomistic MOF prediction",
+  "runtime_agents": {"enabled": false, "llm_calls_allowed": false},
+  "random_seed": 1729,
+  "inputs": {
+    "topologies": "data/topologies.json",
+    "building_blocks": "data/building_blocks.json",
+    "candidates": "data/candidates_unlabelled.jsonl",
+    "model_candidates": "data/model_candidates.json",
+    "training": "data/core_pairwise_training.jsonl",
+    "development": "data/core_pairwise_development.jsonl"
+  },
+  "composition": {"n_sites": 12, "counts": {"A": 6, "B": 6}, "encoding": {"A": 0, "B": 1}},
+  "topology_screen": {"mode": "identity", "retain": ["ring12", "prism6"], "geometric_screen": "SKIPPED_NO_ATOMIC_GEOMETRY"},
+  "model_selection": {
+    "mode": "fixed_grid",
+    "split_unit": "symmetry_orbit",
+    "max_development_rmse_eV": 1e-10,
+    "policy": "Select the fewest parameters among passing models; break ties by model ID",
+    "no_passing_model": "MODEL_INADEQUATE",
+    "holdout_access_during_selection": false
+  },
+  "optimizer": {"method": "exact_enumeration", "restrict_to_composition": true, "quantum_enabled": false},
+  "qubo": {"format": "upper_triangle_once", "ratio_penalty_eV": 1.0, "higher_order": "retain_HUBO_or_explicitly_reject"},
+  "deduplication": {"key": "topology_id:lexicographically_smallest_symmetry_image", "allow_species_label_exchange": false},
+  "candidate_pool": {"top_k_unique_orbits_per_topology": 5, "retain_all_score_ties": true},
+  "evaluation": {"backend": "synthetic_fixture", "correction_mode": "none", "dft_enabled": false, "embedding_enabled": false, "hardware_enabled": false},
+  "active_learning": {"mode": "disabled_for_initial_smoke_test", "max_iterations_if_enabled": 3},
+  "literature": {"mode": "static_manifest", "manifest": "data/literature_catalog.json", "live_review_enabled": false},
+  "structural_checks": {"status": "SKIPPED_NO_ATOMIC_GEOMETRY"},
+  "finite_temperature": {"enabled": false},
+  "reference_runner_note": "tools/reference_run.py is a compact baseline using these fixed policies, not a general project.json loader. Your pipeline adapter should load this manifest."
+}

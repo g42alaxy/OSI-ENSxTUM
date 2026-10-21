@@ -1,0 +1,32 @@
+{
+  "check_groups": [
+    "ring12: symmetry, grouped splits, constraints, swap reachability",
+    "prism6: symmetry, grouped splits, constraints, swap reachability",
+    "core_pairwise / none: selection, untouched holdout, pool and exhaustive minima",
+    "core_pairwise / constant: selection, untouched holdout, pool and exhaustive minima",
+    "core_pairwise / topology_dependent: selection, untouched holdout, pool and exhaustive minima",
+    "higher_order / none: selection, untouched holdout, pool and exhaustive minima",
+    "higher_order / constant: selection, untouched holdout, pool and exhaustive minima",
+    "higher_order / topology_dependent: selection, untouched holdout, pool and exhaustive minima",
+    "Negative inputs, fidelity separation, failed jobs, unit/normalization checks"
+  ],
+  "correction_modes_per_dataset": 3,
+  "datasets": 2,
+  "legal_states_per_graph": 924,
+  "not_tested": [
+    "atomic construction",
+    "geometric screening",
+    "real potential accuracy",
+    "DFT",
+    "embedding",
+    "quantum hardware",
+    "iterative active learning",
+    "live literature review"
+  ],
+  "quantum_circuits_run": 0,
+  "qubo_states_checked": 8192,
+  "real_DFT_calls": 0,
+  "runtime_llm_calls": 0,
+  "scope": "Fixture and bundled reference only; not a test of the user's pipeline",
+  "status": "PASS"
+}

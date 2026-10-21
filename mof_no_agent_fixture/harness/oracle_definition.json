@@ -1,0 +1,14 @@
+{
+  "energy_unit": "eV_per_abstract_formula_unit",
+  "formula": "offset - 0.020*unlike_distance_1 + 0.006*unlike_distance_2 + triplet_coefficient*BBB_paths",
+  "note": "Test-harness ground truth. Do not read during fitting or model selection.",
+  "offsets_eV": {
+    "prism6": 0.2,
+    "ring12": 0.12
+  },
+  "provenance": "SYNTHETIC",
+  "triplet_coefficients_eV": {
+    "core_pairwise": 0.0,
+    "higher_order": 0.015
+  }
+}

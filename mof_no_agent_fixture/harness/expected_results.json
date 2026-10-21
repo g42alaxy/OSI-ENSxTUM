@@ -1,0 +1,138 @@
+{
+  "core_pairwise": {
+    "correction_tests": {
+      "constant": {
+        "minima_eV": {
+          "prism6": -0.11,
+          "ring12": -0.07
+        },
+        "winning_topology": "prism6"
+      },
+      "none": {
+        "minima_eV": {
+          "prism6": -0.16,
+          "ring12": -0.12
+        },
+        "winning_topology": "prism6"
+      },
+      "topology_dependent": {
+        "minima_eV": {
+          "prism6": -0.1,
+          "ring12": -0.12
+        },
+        "winning_topology": "ring12"
+      }
+    },
+    "expected_selected_model": "M1_two_shell_pairs",
+    "topologies": {
+      "prism6": {
+        "ground_state_orbit_ids": [
+          "prism6:010101101010"
+        ],
+        "minimizing_bitstrings": [
+          "010101101010",
+          "101010010101"
+        ],
+        "minimum_energy_eV": -0.16,
+        "n_distance_1_pairs": 18,
+        "n_distance_2_pairs": 24,
+        "n_feasible": 924,
+        "n_path_triplets": 36,
+        "n_symmetry_orbits": 55,
+        "split_orbit_counts": {
+          "development": 10,
+          "holdout": 15,
+          "training": 30
+        }
+      },
+      "ring12": {
+        "ground_state_orbit_ids": [
+          "ring12:010101010101"
+        ],
+        "minimizing_bitstrings": [
+          "010101010101",
+          "101010101010"
+        ],
+        "minimum_energy_eV": -0.12,
+        "n_distance_1_pairs": 12,
+        "n_distance_2_pairs": 12,
+        "n_feasible": 924,
+        "n_path_triplets": 12,
+        "n_symmetry_orbits": 50,
+        "split_orbit_counts": {
+          "development": 10,
+          "holdout": 10,
+          "training": 30
+        }
+      }
+    }
+  },
+  "higher_order": {
+    "correction_tests": {
+      "constant": {
+        "minima_eV": {
+          "prism6": -0.11,
+          "ring12": -0.07
+        },
+        "winning_topology": "prism6"
+      },
+      "none": {
+        "minima_eV": {
+          "prism6": -0.16,
+          "ring12": -0.12
+        },
+        "winning_topology": "prism6"
+      },
+      "topology_dependent": {
+        "minima_eV": {
+          "prism6": -0.1,
+          "ring12": -0.12
+        },
+        "winning_topology": "ring12"
+      }
+    },
+    "expected_selected_model": "M2_pairs_and_triplets",
+    "topologies": {
+      "prism6": {
+        "ground_state_orbit_ids": [
+          "prism6:010101101010"
+        ],
+        "minimizing_bitstrings": [
+          "010101101010",
+          "101010010101"
+        ],
+        "minimum_energy_eV": -0.16,
+        "n_distance_1_pairs": 18,
+        "n_distance_2_pairs": 24,
+        "n_feasible": 924,
+        "n_path_triplets": 36,
+        "n_symmetry_orbits": 55,
+        "split_orbit_counts": {
+          "development": 10,
+          "holdout": 15,
+          "training": 30
+        }
+      },
+      "ring12": {
+        "ground_state_orbit_ids": [
+          "ring12:010101010101"
+        ],
+        "minimizing_bitstrings": [
+          "010101010101",
+          "101010101010"
+        ],
+        "minimum_energy_eV": -0.12,
+        "n_distance_1_pairs": 12,
+        "n_distance_2_pairs": 12,
+        "n_feasible": 924,
+        "n_path_triplets": 12,
+        "n_symmetry_orbits": 50,
+        "split_orbit_counts": {
+          "development": 10,
+          "holdout": 10,
+          "training": 30
+        }
+      }
+    }
+  }
+}

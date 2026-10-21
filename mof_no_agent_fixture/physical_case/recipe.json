@@ -1,0 +1,24 @@
+{
+  "case_id": "mof5_bdc_amino_bdc_1to1",
+  "status": "RECIPE_ONLY_REQUIRES_VERIFIED_ATOMIC_INPUTS",
+  "parent_family": "MOF-5 / IRMOF-1",
+  "candidate_net": "pcu",
+  "metal_node": {"formula": "Zn4O", "formal_charge": 6, "connectivity": 6, "geometry_file": null},
+  "swappable_linkers": [
+    {"id":"BDC","name":"benzene-1,4-dicarboxylate","formula":"C8H4O4","formal_charge":-2,"smiles":"[O-]C(=O)c1ccc(C(=O)[O-])cc1","geometry_file":null},
+    {"id":"NH2_BDC","name":"2-aminobenzene-1,4-dicarboxylate","formula":"C8H5NO4","formal_charge":-2,"smiles":"[O-]C(=O)c1ccc(C(=O)[O-])cc1N","geometry_file":null}
+  ],
+  "parent_cif": null,
+  "target_linker_fractions": {"BDC":0.5,"NH2_BDC":0.5},
+  "cell_policy": "Use a verified cell or supercell with an even number of Zn4O units, 3 linkers per Zn4O unit, and integer equal linker counts. Derive slots from that cell; do not force the synthetic 12-slot graph onto it.",
+  "minimum_stoichiometric_inventory": "Zn8O2(BDC)3(NH2_BDC)3; composition bookkeeping only, not a supplied crystallographic unit cell",
+  "orientation_policy": "Declare a deterministic initial orientation for every asymmetric amino linker; include orientation states explicitly in a later expanded search.",
+  "initial_spin_charge_policy": "Neutral framework with nominal Zn(II) d10 nodes; verify the atomistic calculation setup. This is not a strong-correlation or quantum-advantage benchmark.",
+  "target_ratio_status": "Chosen computational test composition, not a claim of experimental incorporation at 50:50",
+  "source_doi": "10.1039/C4RA10605A",
+  "runtime_agents": false,
+  "finite_temperature": false,
+  "missing_inputs": ["verified desolvated parent CIF", "validated node and linker geometries with attachment-site mapping", "actual periodic energies with recorded computational settings"],
+  "construction_backend": "PORMAKE or an existing deterministic builder; validate topology and local bonding after construction",
+  "scope": "Later test of construction, linker assignment, relaxation, validity checks and energy-model fitting for one physical topology"
+}

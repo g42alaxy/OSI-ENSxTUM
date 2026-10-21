@@ -1,0 +1,40 @@
+{
+  "candidates": [
+    {
+      "feature_indices": [
+        0,
+        1
+      ],
+      "id": "M0_nearest_pairs",
+      "n_parameters": 2,
+      "polynomial_degree": 2
+    },
+    {
+      "feature_indices": [
+        0,
+        1,
+        2
+      ],
+      "id": "M1_two_shell_pairs",
+      "n_parameters": 3,
+      "polynomial_degree": 2
+    },
+    {
+      "feature_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "id": "M2_pairs_and_triplets",
+      "n_parameters": 4,
+      "polynomial_degree": 3
+    }
+  ],
+  "feature_order": [
+    "constant",
+    "unlike_distance_1",
+    "unlike_distance_2",
+    "BBB_paths"
+  ]
+}

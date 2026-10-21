@@ -1,0 +1,316 @@
+"""Task 01 (intake): fixture adapter and strict project validator.
+
+Input mode ``finite_substitution_interaction_graph`` bypasses CIF parsing and
+atomic assembly. Only learner-visible fixture files are read; ``harness/``,
+``reference_outputs/`` and the oracle sources are refused.
+"""
+from __future__ import annotations
+
+import copy
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .contract import PipelineError, StageStatus, content_hash, make_record
+
+FIXTURE_SCHEMA = "mof_no_agent_fixture_v1"
+GRAPH_MODE = "finite_substitution_interaction_graph"
+LEARNER_FORBIDDEN_DIRS = ("harness", "reference_outputs")
+LEARNER_FORBIDDEN_FILES = ("tools/generate_fixture.py", "tools/fixture_core.py")
+CORRECTION_MODES = ("none", "constant", "topology_dependent")
+DEFAULT_SPLIT_MANIFEST = "data/split_manifest.json"  # read by the fixture README, absent from project.json inputs
+
+
+@dataclass(frozen=True)
+class TopologySpec:
+    topology_id: str
+    representation: str
+    n_sites: int
+    site_ids: tuple
+    allowed_species: tuple
+    pairs_d1: tuple
+    pairs_d2: tuple
+    triplets: tuple
+    permutations: tuple
+    n_formula_units: int
+    crystallographic_net_name: object
+    atomic_coordinates: object
+    provenance: str
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "TopologySpec":
+        try:
+            return cls(
+                topology_id=d["topology_id"], representation=d["representation"], n_sites=d["n_sites"],
+                site_ids=tuple(d["site_ids"]), allowed_species=tuple(tuple(s) for s in d["allowed_species_by_site"]),
+                pairs_d1=tuple(tuple(p) for p in d["pairs_distance_1"]),
+                pairs_d2=tuple(tuple(p) for p in d["pairs_distance_2"]),
+                triplets=tuple(tuple(t) for t in d["triplets_length_2_paths"]),
+                permutations=tuple(tuple(p) for p in d["symmetry_pullback_permutations"]),
+                n_formula_units=d["normalization"]["n_abstract_formula_units"],
+                crystallographic_net_name=d.get("crystallographic_net_name"),
+                atomic_coordinates=d.get("atomic_coordinates"), provenance=d.get("provenance"),
+            )
+        except (KeyError, TypeError) as exc:
+            raise PipelineError("MALFORMED_TOPOLOGY", f"{d.get('topology_id')}: {exc!r}") from exc
+
+
+@dataclass(frozen=True)
+class ProjectSpec:
+    project_id: str
+    provenance: str
+    root: Path
+    config: dict
+    case: str
+    correction_mode: str
+    topologies: dict
+    species_encoding: dict
+    composition_counts: dict
+    n_sites: int
+    feature_order: list
+    model_candidates: list
+    training_rows: list
+    development_rows: list
+    split_manifest: dict
+    candidate_rows: list
+    building_blocks: dict
+    literature: dict
+    fingerprint: str = field(default="")
+
+    @property
+    def n_B(self) -> int:
+        """Number of sites carrying encoding 1 (fixed-composition constraint)."""
+        one = [s for s, e in self.species_encoding.items() if e == 1]
+        return self.composition_counts[one[0]] if one else 0
+
+
+def learner_path(root: Path, rel: str) -> Path:
+    path = (root / rel).resolve()
+    root = root.resolve()
+    if root not in path.parents and path != root:
+        raise PipelineError("FORBIDDEN_LEARNER_INPUT", f"outside fixture root: {rel}")
+    parts = path.relative_to(root).as_posix()
+    if parts.split("/")[0] in LEARNER_FORBIDDEN_DIRS or parts in LEARNER_FORBIDDEN_FILES:
+        raise PipelineError("FORBIDDEN_LEARNER_INPUT", rel)
+    if not path.exists():
+        raise PipelineError("MISSING_INPUT_FILE", rel)
+    return path
+
+
+def _read_json(root, rel):
+    return json.loads(learner_path(root, rel).read_text())
+
+
+def _read_jsonl(root, rel):
+    return [json.loads(line) for line in learner_path(root, rel).read_text().splitlines() if line.strip()]
+
+
+def _deep_merge(base: dict, extra: dict) -> dict:
+    out = copy.deepcopy(base)
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def _case_from_fidelity(rows: list, label: str) -> str:
+    fidelities = {r.get("fidelity") for r in rows}
+    if len(fidelities) != 1:
+        raise PipelineError("INCOMPATIBLE_FIDELITY", f"{label}: {sorted(map(str, fidelities))}")
+    fidelity = fidelities.pop()
+    prefix = "SYNTHETIC_BASE_"
+    if not isinstance(fidelity, str) or not fidelity.startswith(prefix):
+        raise PipelineError("UNSUPPORTED_FIDELITY", str(fidelity))
+    return fidelity[len(prefix):].lower()
+
+
+def load_project(project_path, case: str | None = None, correction_mode: str | None = None,
+                 overrides: dict | None = None) -> ProjectSpec:
+    project_path = Path(project_path).resolve()
+    root = project_path.parent
+    #TODO: Task 01 — loader for the full ProjectSpec schema (instructions/project_spec.template.json) and the
+    #TODO: physical case (physical_case/recipe.json); only the synthetic fixture schema is supported now.
+    config = json.loads(project_path.read_text())
+    if overrides:
+        config = _deep_merge(config, overrides)
+    if case is not None:
+        config["inputs"]["training"] = f"data/{case}_training.jsonl"
+        config["inputs"]["development"] = f"data/{case}_development.jsonl"
+    if correction_mode is not None:
+        config["evaluation"]["correction_mode"] = correction_mode
+    inputs = config["inputs"]
+    topologies_raw = _read_json(root, inputs["topologies"])
+    models = _read_json(root, inputs["model_candidates"])
+    training = _read_jsonl(root, inputs["training"])
+    development = _read_jsonl(root, inputs["development"])
+    inferred = _case_from_fidelity(training + development, "training+development")
+    if case is not None and inferred != case:
+        raise PipelineError("CASE_FIDELITY_MISMATCH", f"{case} vs {inferred}")
+    topologies = {}
+    for d in topologies_raw:
+        spec = TopologySpec.from_dict(d)
+        if spec.topology_id in topologies:
+            raise PipelineError("DUPLICATE_TOPOLOGY_ID", spec.topology_id)
+        topologies[spec.topology_id] = spec
+    literature_rel = config.get("literature", {}).get("manifest")
+    spec = ProjectSpec(
+        project_id=config["project_id"], provenance=config["provenance"], root=root, config=config,
+        case=inferred, correction_mode=config["evaluation"]["correction_mode"], topologies=topologies,
+        species_encoding=dict(config["composition"]["encoding"]),
+        composition_counts=dict(config["composition"]["counts"]), n_sites=config["composition"]["n_sites"],
+        feature_order=list(models["feature_order"]), model_candidates=list(models["candidates"]),
+        training_rows=training, development_rows=development,
+        split_manifest=_read_json(root, inputs.get("split_manifest", DEFAULT_SPLIT_MANIFEST)),
+        candidate_rows=_read_jsonl(root, inputs["candidates"]),
+        building_blocks=_read_json(root, inputs["building_blocks"]),
+        literature=_read_json(root, literature_rel) if literature_rel else {},
+    )
+    fingerprint = content_hash({k: getattr(spec, k) for k in (
+        "config", "case", "species_encoding", "composition_counts", "feature_order", "model_candidates",
+        "training_rows", "development_rows", "split_manifest", "candidate_rows", "building_blocks")}
+        | {"topologies": topologies_raw})
+    object.__setattr__(spec, "fingerprint", fingerprint)
+    return spec
+
+
+# --------------------------------------------------------------------------
+def validate_project(spec: ProjectSpec) -> dict:
+    """validate_project(project_spec) -> ValidationReport (Task 01)."""
+    from .configuration_model import FEATURE_DEGREE
+
+    checks, errors = [], []
+    cfg = spec.config
+
+    def check(name, ok, code, detail=""):
+        checks.append({"check": name, "passed": bool(ok)})
+        if not ok:
+            errors.append({"code": code, "check": name, "detail": detail})
+
+    check("schema", cfg.get("schema") == FIXTURE_SCHEMA, "UNSUPPORTED_PROJECT_SCHEMA", str(cfg.get("schema")))
+    check("project_provenance", spec.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH", spec.provenance)
+    check("building_block_provenance", spec.building_blocks.get("provenance") == "SYNTHETIC", "PROVENANCE_MISMATCH")
+    #TODO: Task 10 — runtime agent layer (structure / model_search / electronic / reviewer roles via the tool gateway).
+    agents = cfg.get("runtime_agents", {})
+    check("runtime_agents_disabled", agents.get("enabled") is False and agents.get("llm_calls_allowed") is False,
+          "AGENT_LAYER_NOT_IMPLEMENTED", "runtime agents must be disabled in this build")
+    check("finite_temperature_out_of_scope", cfg.get("finite_temperature", {}).get("enabled") is False,
+          "UNSUPPORTED_SCOPE_FINITE_TEMPERATURE")
+
+    # Composition and species encoding
+    counts, enc = spec.composition_counts, spec.species_encoding
+    bb_species = {s["id"]: s["encoding"] for s in spec.building_blocks.get("species", [])}
+    check("composition_integral", all(type(v) is int and v >= 0 for v in counts.values()),
+          "INVALID_COMPOSITION_SPEC", str(counts))
+    check("composition_sums_to_sites", sum(counts.values()) == spec.n_sites, "INVALID_COMPOSITION_SPEC",
+          f"{sum(counts.values())} != {spec.n_sites}")
+    check("encoding_matches_building_blocks", enc == bb_species and set(enc) == set(counts),
+          "ENCODING_MISMATCH", f"{enc} vs {bb_species}")
+    #TODO: Task 03/04 — multicomponent (one-hot) species encodings and per-sublattice composition counts.
+    check("binary_encoding", sorted(enc.values()) == [0, 1], "UNSUPPORTED_MULTICOMPONENT_ENCODING", str(enc))
+
+    # Topologies
+    for tid, topo in spec.topologies.items():
+        n = topo.n_sites
+        #TODO: Task 01 — CIF / periodic-net input mode: parse CIFs with provenance, resolve partial occupancy and
+        #TODO: disorder by a declared policy, check connectors and charge balance, derive slots per supercell.
+        check(f"{tid}:input_mode", topo.representation == GRAPH_MODE, "UNSUPPORTED_INPUT_MODE", topo.representation)
+        check(f"{tid}:provenance", topo.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH")
+        check(f"{tid}:no_physical_net_claim", topo.crystallographic_net_name is None and topo.atomic_coordinates is None,
+              "GRAPH_FIXTURE_CLAIMS_PHYSICAL_NET")
+        check(f"{tid}:site_count", n == spec.n_sites and topo.site_ids == tuple(range(n)), "INVALID_SITE_COUNT")
+        check(f"{tid}:allowed_species", len(topo.allowed_species) == n and all(set(s) <= set(enc) for s in topo.allowed_species),
+              "INVALID_ALLOWED_SPECIES")
+        for species, count in counts.items():
+            hosts = sum(species in s for s in topo.allowed_species)
+            check(f"{tid}:composition_feasible:{species}", hosts >= count, "INFEASIBLE_COMPOSITION", f"{hosts}<{count}")
+        for label, terms, size in (("pairs_d1", topo.pairs_d1, 2), ("pairs_d2", topo.pairs_d2, 2), ("triplets", topo.triplets, 3)):
+            ok = all(len(t) == size and len(set(t)) == size and all(type(i) is int and 0 <= i < n for i in t) for t in terms)
+            ok = ok and len({tuple(sorted(t)) for t in terms}) == len(terms)
+            check(f"{tid}:{label}_valid", ok, "MALFORMED_INTERACTION_LIST", label)
+        check(f"{tid}:normalization", type(topo.n_formula_units) is int and topo.n_formula_units > 0,
+              "INVALID_FORMULA_UNIT_COUNT")
+        perms = [tuple(p) for p in topo.permutations]
+        valid = all(sorted(p) == list(range(n)) for p in perms)
+        check(f"{tid}:permutations_bijective", valid, "INVALID_SYMMETRY_OPERATION")
+        if valid:
+            pset = set(perms)
+            check(f"{tid}:group_identity", tuple(range(n)) in pset, "SYMMETRY_GROUP_NOT_CLOSED", "identity missing")
+            check(f"{tid}:group_closed", all(tuple(p[q[i]] for i in range(n)) in pset for p in perms for q in perms),
+                  "SYMMETRY_GROUP_NOT_CLOSED")
+            for label, terms in (("pairs_d1", topo.pairs_d1), ("pairs_d2", topo.pairs_d2), ("triplets", topo.triplets)):
+                ref = {tuple(sorted(t)) for t in terms}
+                check(f"{tid}:symmetry_preserves_{label}",
+                      all({tuple(sorted(p[i] for i in t)) for t in ref} == ref for p in perms),
+                      "SYMMETRY_CHANGES_GRAPH", label)
+
+    screen = cfg.get("topology_screen", {})
+    check("screen_retains_all_supplied_graphs",
+          screen.get("mode") == "identity" and set(screen.get("retain", [])) == set(spec.topologies),
+          "SCREENING_POLICY_EXCLUDES_WITHOUT_EVIDENCE", str(screen.get("retain")))
+
+    # Model candidates
+    ids = [m["id"] for m in spec.model_candidates]
+    check("model_ids_unique", len(ids) == len(set(ids)), "DUPLICATE_MODEL_ID")
+    for model in spec.model_candidates:
+        inds = model["feature_indices"]
+        valid = all(type(i) is int and 0 <= i < len(spec.feature_order) for i in inds) and len(set(inds)) == len(inds)
+        check(f"{model['id']}:feature_indices", valid, "INVALID_FEATURE_INDEX")
+        if not valid:
+            continue
+        names = [spec.feature_order[i] for i in inds]
+        known = all(n in FEATURE_DEGREE for n in names)
+        check(f"{model['id']}:features_known", known, "UNSUPPORTED_FEATURE", str(names))
+        check(f"{model['id']}:explicit_constant_term", "constant" in names, "MISSING_CONSTANT_TERM")
+        check(f"{model['id']}:n_parameters", model.get("n_parameters") == len(inds), "PARAMETER_COUNT_MISMATCH")
+        if known:
+            check(f"{model['id']}:declared_degree", model.get("polynomial_degree") == max(FEATURE_DEGREE[n] for n in names),
+                  "POLYNOMIAL_DEGREE_MISMATCH")
+
+    ms = cfg.get("model_selection", {})
+    threshold = ms.get("max_development_rmse_eV")
+    check("selection_threshold", isinstance(threshold, (int, float)) and not isinstance(threshold, bool) and threshold >= 0,
+          "SCIENTIFIC_SPEC_MISSING", "model_selection.max_development_rmse_eV")
+    check("selection_split_unit", ms.get("split_unit") == "symmetry_orbit", "UNSUPPORTED_SPLIT_UNIT")
+    check("selection_holdout_blind", ms.get("holdout_access_during_selection") is False, "HOLDOUT_ACCESS_FORBIDDEN")
+    check("selection_failure_code", ms.get("no_passing_model") == "MODEL_INADEQUATE", "SCIENTIFIC_SPEC_MISSING")
+
+    opt = cfg.get("optimizer", {})
+    check("optimizer_method", opt.get("method") == "exact_enumeration", "UNSUPPORTED_SOLVER", str(opt.get("method")))
+    check("optimizer_fixed_composition", opt.get("restrict_to_composition") is True, "UNSUPPORTED_SOLVER")
+    #TODO: Task 04 — accept quantum solver protocols once QAOA simulation / QPU adapters exist.
+    check("quantum_disabled", opt.get("quantum_enabled") is False, "UNSUPPORTED_QUANTUM_BACKEND")
+    qubo = cfg.get("qubo", {})
+    penalty = qubo.get("ratio_penalty_eV")
+    check("qubo_format", qubo.get("format") == "upper_triangle_once", "UNSUPPORTED_ENCODING_FORMAT")
+    check("qubo_penalty", isinstance(penalty, (int, float)) and not isinstance(penalty, bool) and penalty > 0,
+          "SCIENTIFIC_SPEC_MISSING", "qubo.ratio_penalty_eV")
+    check("qubo_higher_order_policy", qubo.get("higher_order") == "retain_HUBO_or_explicitly_reject",
+          "UNSUPPORTED_ENCODING_POLICY")
+    dedup = cfg.get("deduplication", {})
+    check("no_species_label_exchange", dedup.get("allow_species_label_exchange") is False,
+          "UNSUPPORTED_SYMMETRY_POLICY")
+    pool = cfg.get("candidate_pool", {})
+    check("pool_size", type(pool.get("top_k_unique_orbits_per_topology")) is int and pool["top_k_unique_orbits_per_topology"] > 0,
+          "SCIENTIFIC_SPEC_MISSING", "candidate_pool.top_k_unique_orbits_per_topology")
+    ev = cfg.get("evaluation", {})
+    check("evaluation_backend", ev.get("backend") == "synthetic_fixture", "UNSUPPORTED_EVALUATION_BACKEND")
+    check("correction_mode", ev.get("correction_mode") in CORRECTION_MODES, "UNKNOWN_CORRECTION_MODE",
+          str(ev.get("correction_mode")))
+    #TODO: Tasks 06/07 — allow these flags once periodic DFT, embedding and hardware backends are implemented.
+    for flag in ("dft_enabled", "embedding_enabled", "hardware_enabled"):
+        check(f"evaluation_{flag}_false", ev.get(flag) is False, "UNSUPPORTED_ELECTRONIC_BACKEND", flag)
+    al = cfg.get("active_learning", {})
+    check("active_learning_mode", al.get("mode") in ("disabled_for_initial_smoke_test", "enabled"),
+          "UNSUPPORTED_ACTIVE_LEARNING_MODE")
+    check("active_learning_bounded", type(al.get("max_iterations_if_enabled")) is int and 0 < al["max_iterations_if_enabled"] <= 3,
+          "UNBOUNDED_ACTIVE_LEARNING")
+    #TODO: live literature review mode (retrieve papers, map claims to cited passages); static manifest only now.
+    lit = cfg.get("literature", {})
+    check("literature_static", lit.get("mode") == "static_manifest" and lit.get("live_review_enabled") is False,
+          "UNSUPPORTED_LITERATURE_MODE")
+
+    status = StageStatus.COMPLETED if not errors else StageStatus.BLOCKED
+    return make_record("ValidationReport", spec.provenance, scope="project", project_id=spec.project_id,
+                       status=status.value, n_checks=len(checks), checks=checks, errors=errors)

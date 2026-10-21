@@ -1,0 +1,22 @@
+{
+  "metal_node": {
+    "chemistry": null,
+    "id": "FIXED_PLACEHOLDER"
+  },
+  "note": "No molecular geometries, force-field parameters or atomic CIFs are supplied.",
+  "provenance": "SYNTHETIC",
+  "species": [
+    {
+      "chemical_formula": null,
+      "encoding": 0,
+      "id": "A",
+      "role": "abstract_linker_label"
+    },
+    {
+      "chemical_formula": null,
+      "encoding": 1,
+      "id": "B",
+      "role": "abstract_linker_label"
+    }
+  ]
+}

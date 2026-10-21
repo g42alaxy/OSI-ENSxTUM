@@ -1,0 +1,656 @@
+{
+  "case": "higher_order",
+  "correction": "none",
+  "note": "Reference algorithm only; no atomic construction, DFT, embedding or quantum circuit is executed.",
+  "pooled_winner": "prism6",
+  "provenance": "SYNTHETIC",
+  "ranked_pool": [
+    {
+      "base_energy_eV": -0.16,
+      "bits": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.16,
+      "orbit_id": "prism6:010101101010",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.12,
+      "bits": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.12,
+      "orbit_id": "ring12:010101010101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010101011",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010101101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.056,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.056,
+      "orbit_id": "ring12:001010110101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.017,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.017,
+      "orbit_id": "prism6:000101111010",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.017,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.017,
+      "orbit_id": "prism6:001011010101",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.008,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "corrected_energy_eV": -0.008,
+      "orbit_id": "prism6:001001110110",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.008,
+      "bits": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "corrected_energy_eV": -0.008,
+      "orbit_id": "prism6:001011110100",
+      "topology_id": "prism6"
+    },
+    {
+      "base_energy_eV": -0.004,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.004,
+      "orbit_id": "ring12:000101011011",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.004,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.004,
+      "orbit_id": "ring12:000101101011",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.004,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "corrected_energy_eV": -0.004,
+      "orbit_id": "ring12:000101101101",
+      "topology_id": "ring12"
+    },
+    {
+      "base_energy_eV": -0.004,
+      "bits": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "corrected_energy_eV": -0.004,
+      "orbit_id": "ring12:000110101011",
+      "topology_id": "ring12"
+    }
+  ],
+  "runtime_agents_enabled": false,
+  "topologies": {
+    "prism6": {
+      "base_model_encoding": "HUBO",
+      "correction_application": "post-solve synthetic score; not compiled into base QUBO",
+      "ground_state_orbits": [
+        "prism6:010101101010"
+      ],
+      "minimizing_bitstrings": [
+        "010101101010",
+        "101010010101"
+      ],
+      "minimum_energy_eV": -0.16,
+      "minimum_scope": "exhaustive corrected reference over all legal states",
+      "model_candidates": [
+        {
+          "coefficients_exact": [
+            "158243/332500",
+            "-9283/266000"
+          ],
+          "development_rmse_eV": 0.006699810867227728,
+          "indices": [
+            0,
+            1
+          ],
+          "model": "M0_nearest_pairs",
+          "n_parameters": 2,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "1395617/2970400",
+            "-10319/297040",
+            "9819/29704000"
+          ],
+          "development_rmse_eV": 0.006122851820132809,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "model": "M1_two_shell_pairs",
+          "n_parameters": 3,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "1/5",
+            "-1/50",
+            "3/500",
+            "3/200"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "model": "M2_pairs_and_triplets",
+          "n_parameters": 4,
+          "status": "OK"
+        }
+      ],
+      "n_feasible": 924,
+      "n_symmetry_orbits": 55,
+      "selected_model": "M2_pairs_and_triplets",
+      "selected_pool": [
+        {
+          "base_energy_eV": -0.16,
+          "bits": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.16,
+          "orbit_id": "prism6:010101101010"
+        },
+        {
+          "base_energy_eV": -0.017,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.017,
+          "orbit_id": "prism6:000101111010"
+        },
+        {
+          "base_energy_eV": -0.017,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.017,
+          "orbit_id": "prism6:001011010101"
+        },
+        {
+          "base_energy_eV": -0.008,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0
+          ],
+          "corrected_energy_eV": -0.008,
+          "orbit_id": "prism6:001001110110"
+        },
+        {
+          "base_energy_eV": -0.008,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          "corrected_energy_eV": -0.008,
+          "orbit_id": "prism6:001011110100"
+        }
+      ]
+    },
+    "ring12": {
+      "base_model_encoding": "HUBO",
+      "correction_application": "post-solve synthetic score; not compiled into base QUBO",
+      "ground_state_orbits": [
+        "ring12:010101010101"
+      ],
+      "minimizing_bitstrings": [
+        "010101010101",
+        "101010101010"
+      ],
+      "minimum_energy_eV": -0.12,
+      "minimum_scope": "exhaustive corrected reference over all legal states",
+      "model_candidates": [
+        {
+          "coefficients_exact": [
+            "7761/32840",
+            "-2987/102625"
+          ],
+          "development_rmse_eV": 0.006891809315431268,
+          "indices": [
+            0,
+            1
+          ],
+          "model": "M0_nearest_pairs",
+          "n_parameters": 2,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "39797/188900",
+            "-41873/1511200",
+            "35677/15112000"
+          ],
+          "development_rmse_eV": 0.005394733691575778,
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "model": "M1_two_shell_pairs",
+          "n_parameters": 3,
+          "status": "OK"
+        },
+        {
+          "coefficients_exact": [
+            "3/25",
+            "-1/50",
+            "3/500",
+            "3/200"
+          ],
+          "development_rmse_eV": 0.0,
+          "indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "model": "M2_pairs_and_triplets",
+          "n_parameters": 4,
+          "status": "OK"
+        }
+      ],
+      "n_feasible": 924,
+      "n_symmetry_orbits": 50,
+      "selected_model": "M2_pairs_and_triplets",
+      "selected_pool": [
+        {
+          "base_energy_eV": -0.12,
+          "bits": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.12,
+          "orbit_id": "ring12:010101010101"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010101011"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010101101"
+        },
+        {
+          "base_energy_eV": -0.056,
+          "bits": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.056,
+          "orbit_id": "ring12:001010110101"
+        },
+        {
+          "base_energy_eV": -0.004,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.004,
+          "orbit_id": "ring12:000101011011"
+        },
+        {
+          "base_energy_eV": -0.004,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.004,
+          "orbit_id": "ring12:000101101011"
+        },
+        {
+          "base_energy_eV": -0.004,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1
+          ],
+          "corrected_energy_eV": -0.004,
+          "orbit_id": "ring12:000101101101"
+        },
+        {
+          "base_energy_eV": -0.004,
+          "bits": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "corrected_energy_eV": -0.004,
+          "orbit_id": "ring12:000110101011"
+        }
+      ]
+    }
+  },
+  "winning_topology": "prism6"
+}
