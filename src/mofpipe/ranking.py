@@ -7,8 +7,12 @@ from .contract import PipelineError, StageStatus, make_record
 from .datasets import check_energy_compatibility
 
 
-def rank_candidates(spec, pool_rows: list, results: list, level: str) -> dict:
-    """rank_candidates(candidate_ids, comparison_policy_id) -> RankingReport for one energy level."""
+def rank_candidates(spec, pool_rows: list, results: list, level: str, tie_tolerance: Fraction | None = None) -> dict:
+    """rank_candidates(candidate_ids, comparison_policy_id) -> RankingReport for one energy level.
+
+    Without ``tie_tolerance`` only exact equality is a tie (noiseless fixture). With it, a candidate within the
+    tolerance of the previous one is tied with it (physical projects: target_relative_energy_tolerance).
+    """
     if level not in ("base", "corrected"):
         raise PipelineError("UNKNOWN_ENERGY_LEVEL", level)
     by_cid = {}
@@ -33,17 +37,18 @@ def rank_candidates(spec, pool_rows: list, results: list, level: str) -> dict:
         table.append({"orbit_id": cand["orbit_id"], "configuration_id": res["configuration_id"],
                       "topology_id": cand["topology_id"], "occupation": "".join(map(str, cand["bits"])),
                       "bits": cand["bits"], "surrogate_base_energy_eV": cand["predicted_base_energy_eV"],
-                      "base_energy_eV": res["base_energy_eV"], "correction_eV": res["correction_eV"],
-                      "corrected_energy_eV": res["corrected_energy_eV"], "ranking_energy_eV": float(energy),
+                      "base_energy_eV": res["base_energy_eV"], "correction_eV": res.get("correction_eV"),
+                      "corrected_energy_eV": res.get("corrected_energy_eV"), "ranking_energy_eV": float(energy),
                       "ranking_energy_exact": str(energy), "base_fidelity": res["base_fidelity"],
-                      "corrected_fidelity": res["corrected_fidelity"], "provenance": res["provenance"],
+                      "corrected_fidelity": res.get("corrected_fidelity"), "provenance": res["provenance"],
                       "calculation_result_id": res["artifact_id"]})
     table.sort(key=lambda r: (Fraction(r["ranking_energy_exact"]), r["orbit_id"]))
     values = [Fraction(r["ranking_energy_exact"]) for r in table]
+    tol = tie_tolerance or 0
     for idx, row in enumerate(table):
         row["rank"] = idx + 1
-        row["tied_with_previous"] = idx > 0 and values[idx] == values[idx - 1]
-        row["n_degenerate"] = values.count(values[idx])
+        row["tied_with_previous"] = idx > 0 and values[idx] - values[idx - 1] <= tol
+        row["n_degenerate"] = sum(abs(v - values[idx]) <= tol for v in values)
     minima = {}
     for row in table:
         minima.setdefault(row["topology_id"], row["ranking_energy_eV"])
@@ -53,7 +58,9 @@ def rank_candidates(spec, pool_rows: list, results: list, level: str) -> dict:
         fidelity=table[0][f"{level}_fidelity"] if table else None, comparison_group=rows[0][1]["comparison_group"] if rows else None,
         status=StageStatus.COMPLETED.value if complete else StageStatus.INCOMPLETE.value,
         missing_evaluations=missing, failed_evaluations=failed,
-        tie_policy="exact rational equality is a true degeneracy; display order breaks ties by orbit_id",
+        tie_policy=("exact rational equality is a true degeneracy" if tie_tolerance is None else
+                    f"differences <= {float(tie_tolerance)} eV per formula unit are ties within tolerance")
+                   + "; display order breaks ties by orbit_id",
         coverage="screened finalist pool (top-k unique orbits per graph), not a global certificate over all legal states",
         winning_topology=table[0]["topology_id"] if table else None, pool_minima_eV=minima, ranked=table,
     )
@@ -74,10 +81,10 @@ def evaluate_reference_mixtures(spec, ranking: dict) -> dict:
 
 def validate_structures(spec) -> dict:
     #TODO: Task 09 — validate_structure wrappers (version, parameters, raw evidence): MOFChecker sanity checks,
-    #TODO: CrystalNets/MOFid topology identity, Zeo++ pore descriptors, post-relaxation connectivity and
-    #TODO: residual force/stress, phonon/elastic stability for finalists, PXRD (and validated NMR) comparison
-    #TODO: with referenced measurements.
-    skipped =StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value
+    #TODO: CrystalNets/MOFid topology identity, Zeo++ pore descriptors, phonon/elastic stability for finalists,
+    #TODO: PXRD (and validated NMR) comparison with referenced measurements. Physical projects already check
+    #TODO: builder sanity, post-relaxation slot mapping and residual force/stress (framework.py, dft.py).
+    skipped = StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value
     return {name: skipped for name in ("atomic_construction", "mofchecker", "crystalnets_topology", "zeopp_pores",
                                        "post_relaxation_connectivity", "phonon_elastic_stability", "pxrd_comparison",
                                        "nmr_comparison")}

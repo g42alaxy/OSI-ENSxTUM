@@ -87,7 +87,7 @@ def quantum_solver_status(spec) -> dict:
     #TODO: states, count-preserving one-hot exchanges for multicomponent sites, decode/re-evaluate every sample,
     #TODO: record depth/shots/seeds/optimizer calls; benchmark vs exact/SA across seeds.
     #TODO: Task 04 — QPU hardware adapter, only after simulator acceptance (scheduler controls budgets).
-    enabled =spec.config["optimizer"].get("quantum_enabled", False)
+    enabled = spec.config["optimizer"].get("quantum_enabled", False)
     return {"qaoa_simulation": StageStatus.DISABLED_BY_CONFIG.value if not enabled else StageStatus.UNSUPPORTED.value,
             "qpu_hardware": StageStatus.DISABLED_BY_CONFIG.value,
             "note": "No circuits executed; fixed-count swap reachability is a graph check only."}

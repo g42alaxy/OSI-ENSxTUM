@@ -1,12 +1,19 @@
 # What is implemented in `mofpipe`, and what the tests check
 
-`src/mofpipe/` is a deterministic implementation of the pipeline specified in `instructions/`, with runtime LLM agents switched off. It corresponds to **Milestone A** of `instructions/10_AGENT_ARCHITECTURE.md`: schemas, persistence, job lifecycle and one tiny synthetic end-to-end fixture. It runs on `mof_no_agent_fixture/`, whose two 12-site substitution graphs (`ring12`, `prism6`) are **abstract test problems, not atomistic MOFs**. Passing results prove that the software path and its bookkeeping are correct. They say nothing about real MOF energetics. Everything not implemented is listed in [TODO.md](TODO.md).
+`src/mofpipe/` is a deterministic implementation of the pipeline specified in `instructions/`, with runtime LLM agents switched off. It covers two milestones of `instructions/10_AGENT_ARCHITECTURE.md`:
 
-Python ≥ 3.10, standard library only; pytest for tests. About 2,150 lines of pipeline code and 700 lines of tests.
+- **Milestone A:** schemas, persistence, job lifecycle and one tiny synthetic end-to-end fixture. It runs on `mof_no_agent_fixture/`, whose two 12-site substitution graphs (`ring12`, `prism6`) are **abstract test problems, not atomistic MOFs**.
+- **Milestone B** (section 4): physical projects. A single binary topology goes from a CIF through built frameworks and periodic DFT labels to a grouped-validated energy model and a DFT ranking. It is verified only on a **SYNTHETIC** toy framework driven by a mock `pw.x`.
+
+Passing results prove that the software path and its bookkeeping are correct. They say nothing about real MOF energetics. Everything not implemented is listed in [TODO.md](TODO.md).
+
+Python ≥ 3.10, standard library only; pytest for tests. About 4,350 lines of pipeline code and 1,550 lines of tests.
 
 ```bash
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs   # 6 runs + acceptance
-python3 -m pytest                                                                                 # 106 tests
+python3 tests/toy_framework.py runs/toy_project                                                  # write the SYNTHETIC toy physical project
+PYTHONPATH=src python3 -m mofpipe run --project runs/toy_project/project.json                    # CIF -> DFT (mock pw.x) -> model -> ranking
+python3 -m pytest                                                                                 # 161 tests
 ```
 
 ## 1. What the pipeline does
@@ -153,9 +160,40 @@ Four deliberate bugs were injected one at a time, and the suite caught each:
 - letting active learning acquire holdout orbits;
 - selecting the most complex passing model.
 
-## 4. What the tests do not establish
+## 4. Milestone B: physical projects
 
-- **Physics.** No real MOF structure, ML potential, DFT, embedding or quantum circuit is involved. The corrections are artificial bookkeeping tests.
+`intake.load_project` recognises a ProjectSpec v0.1 file (the `instructions/project_spec.template.json` shape) or a `physical_case/recipe.json`. Either one loads into the same `ProjectSpec` with `project_type = "physical_structure"`, and the orchestrator then picks `_physical_*` stage variants where the fixture path does not apply. The stage order is unchanged.
+
+| Stage | Physical-project behaviour | Module |
+|---|---|---|
+| intake | One `SCIENTIFIC_SPEC_MISSING` error per null/empty required field, with its path (28 for the untouched template). CIF checksum, disorder and guest policy, building-block declarations, connector counts, node connectivity, integral sublattice counts, inventory per formula unit and charge balance are all checked here, before any calculation. Pseudopotential hashes and DFT protocol fields are verified too. | `project_spec.py`, `cif.py`, `framework.py`, `dft.py` |
+| structures | Slot lattice from the CIF: periodic bond graph → nodes and linkers → slots, with contact-weighted distance-1 pairs, distance-2 pairs, triplets, and permutations from space-group operations × supercell translations. The known parent is rebuilt and must match the parsed supercell exactly. | `framework.py` |
+| labels | A seeded orbit split (training / frozen holdout / unlabelled) is fixed before any energy exists. Next, a cutoff convergence study of an energy difference runs, and an unconverged cutoff blocks the run. Then every labelled orbit is built and relaxed, with a final single point and each declared magnetic state. Failed and transformed calculations are recorded, never labelled. | `orchestrator.py`, `dft.py`, `datasets.py` |
+| model_selection | Grouped K-fold CV with a documented rank-deficiency gauge and optional ridge. CV RMSE and tie-aware low-energy recall against the declared tolerances; fewest effective parameters wins. The frozen holdout is evaluated once afterwards. | `configuration_model.py` |
+| encoding → candidates | Unchanged; they act on the CIF-derived `TopologySpec`. | |
+| evaluation | Each pool candidate goes through build → DFT. Labelled candidates come from the job cache. Failures become missing evaluations. | `orchestrator.py` |
+| ranking | DFT-only base ranking; differences within `target_relative_energy_tolerance` are ties. The corrected ranking is `DISABLED_BY_CONFIG`. | `ranking.py` |
+| validation | Builder sanity, post-relaxation slot mapping and residual force/stress counts; external tools are `SKIPPED`. | `orchestrator.py` |
+
+**Toy result** (`tests/toy_framework.py`):
+- Input: a Pm-3m Zn/linker net and a 2×2×1 cell, with 12 slots, 4 nodes, 2 formula units, 32 slot permutations and 56 orbits.
+- Labels: 44 training and 12 holdout orbits.
+- The 80 Ry cutoff is converged to 2.2 meV per formula unit for the energy difference; 60 Ry is not.
+- Selection: M0 is selected, with CV RMSE 0.24 meV per formula unit and holdout RMSE about 0.3 meV.
+- Evaluation: the 6 pool candidates (top 3 plus cutoff ties) all come from the job cache, so no DFT job runs twice. Their DFT energies lie within 1.1 meV per formula unit, so the ranking reports them as ties within the 5 meV tolerance instead of a strict order.
+
+The mock energy has a node-mediated N–N term plus a weak orientation-dependent term that the slot features cannot represent, so the CV error is not zero.
+
+### Tests (55 new)
+
+| File | Checks |
+|---|---|
+| `test_physical_intake.py` (30) | **T01.1:** template → exactly the required paths, once each; template run blocks at intake and still reports; recipe → separate PHYSICAL project blocked on its missing inputs; formula parsing; physical and synthetic projects cannot share a run dir; fixture case modes refused; nested protocol fields, science-changing retry steps, unconverged-series spec, unsupported later-milestone fields; pseudopotential tampering; protocol registry files. **T01.2:** symmetry expansion and checksum; slot lattice counts, degrees, contact weights, group checks; slot mapping identical for reversed and random atom order (P1 input keeps only translations); disorder, non-integral ratio, charge, inventory, checksum and guest errors all block before any job; wrong connector/connectivity declarations; guest removal only under the declared policy. **T01.3:** every symmetry-distinct legal decoration builds with the target inventory; builds reproduce identical artifacts; CIF export round-trips; parent rebuild identical; an overlapping substituent gives `ATOM_OVERLAP` and no DFT job; PORMAKE adapter never fabricates geometry. |
+| `test_physical_dft_and_model.py` (25) | **T06.1:** QE input carries every scientific setting; relax + single point normalised by verified formula units; SCF retry changes only the declared numerics; unconverged relaxation, residual force, lost atom, topology change and crash never yield energies; reordered atoms give the same normalised energy and a symmetry image agrees within tolerance; a z-replicated cell gives the same energy per formula unit; a restarted backend reuses jobs; budget, missing executable and unconverged cutoff block. **T06.2:** full physical run completes; every ranked energy traces to a stored CalculationResult and Geometry; tolerance ties; rerun and mid-label resume submit no new DFT jobs; a build failure in the pool makes the ranking `INCOMPLETE`. **T03.2:** fewest-parameter model with the documented gauge; no orbit crosses train/holdout and folds are deterministic; `fail` gauge policy and too-tight tolerance give explicit failures; a perturbed Hamiltonian fails the holdout; gauge/ridge/recall helpers; physical and fixture snapshots never merge. |
+
+## 5. What the tests do not establish
+
+- **Physics.** No real MOF structure, ML potential, DFT, embedding or quantum circuit is involved. The corrections are artificial bookkeeping tests. The Milestone B DFT path is exercised against a mock `pw.x` that speaks Quantum ESPRESSO's formats. Whether the input/output handling matches a real `pw.x` version still has to be checked on a real installation.
 - **Scaling.** Exact enumeration and the 2ⁿ encoding check are feasible only for these 12-site graphs.
 - **Real-data model selection.** The near-zero RMSE threshold is valid only because the fixture labels are exact.
 - **Active-learning quality.** The tests show the loop is bounded, holdout-safe and stops honestly. They do not show that its acquisition policy is efficient.

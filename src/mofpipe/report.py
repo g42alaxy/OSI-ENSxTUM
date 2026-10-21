@@ -11,6 +11,27 @@ NOT_EXECUTED = ["atomic construction (PORMAKE/ToBaCCo)", "ML-potential relaxatio
                 "quadratization of higher-order models", "MOFChecker/CrystalNets/Zeo++", "phonon/elastic stability",
                 "PXRD/NMR comparison", "reference phase-competition energies", "live literature review",
                 "finite-temperature ensembles (out of scope)"]
+EXECUTED_IN_PHYSICAL_PROJECTS = ("atomic construction (PORMAKE/ToBaCCo)", "periodic DFT")
+NOT_EXECUTED_PHYSICAL = ["PORMAKE/ToBaCCo builder (parent-substitution builder used)", "linker orientation search (T01.4)",
+                         "larger-supercell transfer test (T01.5)", "calibrated model uncertainty (T03.3)"]
+
+
+def not_executed(spec) -> list:
+    if spec.project_type == "synthetic_fixture":
+        return NOT_EXECUTED
+    return [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS] + NOT_EXECUTED_PHYSICAL
+
+
+def _physical_section(ctx, detail) -> dict:
+    labels, selection = detail.get("labels") or {}, detail.get("model_selection") or {}
+    return {
+        "dft_convergence": labels.get("dft_convergence"), "split_counts": labels.get("split_counts"),
+        "transformation_events": labels.get("transformation_events"), "failed_labels": labels.get("failed_labels"),
+        "holdout": selection.get("holdout"), "labelled_ground_state_recovered": selection.get("labelled_ground_state_recovered"),
+        "atomic_construction": (detail.get("structures") or {}).get("atomic_construction"),
+        "geometry_ids": sorted(v["artifact_id"] for k, v in ctx.items() if k.startswith("geometry/")),
+        "evaluation_not_evaluated": (detail.get("evaluation") or {}).get("not_evaluated"),
+    }
 
 
 def _topology_section(spec, ctx, tid) -> dict:
@@ -19,7 +40,8 @@ def _topology_section(spec, ctx, tid) -> dict:
         out["model_selection"] = {"status": sel["status"], "selected_model": sel["selected_model"], "reason": sel["reason"],
                                   "candidates": [{k: c.get(k) for k in ("model_id", "status", "n_parameters", "polynomial_degree",
                                                                          "coefficients_exact", "training_rmse_eV",
-                                                                         "development_rmse_eV", "passes", "failure")}
+                                                                         "development_rmse_eV", "cv_rmse_eV",
+                                                                         "low_energy_recall", "passes", "failure")}
                                                  for c in sel["candidates"]]}
     ham = ctx.get(f"hamiltonian/{tid}")
     if ham:
@@ -57,19 +79,23 @@ def build_report(spec, store, ctx, detail, status) -> dict:
     final = "COMPLETED" if all(status.get(s) in (StageStatus.COMPLETED.value, StageStatus.DISABLED_BY_CONFIG.value,
                                                   StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value)
                                for s in status if s != "report") else "FAILED_OR_INCOMPLETE"
+    extra = {} if spec.project_type == "synthetic_fixture" else {
+        "project_type": spec.project_type, "physical": _physical_section(ctx, detail),
+        "base_pool_minima_eV": base["pool_minima_eV"] if base else None}
     return make_record(
-        "ReportArtifacts", spec.provenance, project_id=spec.project_id, case=spec.case, correction_mode=spec.correction_mode,
+        "ReportArtifacts", spec.provenance, **extra, project_id=spec.project_id, case=spec.case,
+        correction_mode=spec.correction_mode,
         pipeline_status=final, project_fingerprint=spec.fingerprint, stage_order=list(status) + ["report"],
         runtime_agents_enabled=False, llm_calls=store.state["counters"].get("llm_calls", 0), network_calls=0,
         stage_status=dict(status), completed_software_stages=sorted(executed),
         stage_detail={k: v for k, v in detail.items() if k in ("structures", "labels", "refinement", "model_selection",
                                                                "encoding", "optimization", "candidates", "evaluation", "ranking")},
         topologies={tid: _topology_section(spec, ctx, tid) for tid in spec.topologies},
-        winning_topology=corrected["winning_topology"] if corrected else None,
+        winning_topology=(corrected or base or {}).get("winning_topology"),
         base_winning_topology=base["winning_topology"] if base else None,
         corrected_pool_minima_eV=corrected["pool_minima_eV"] if corrected else None,
         base_ranking=base["ranked"] if base else None, corrected_ranking=corrected["ranked"] if corrected else None,
-        ranking_coverage=corrected["coverage"] if corrected else None,
+        ranking_coverage=(corrected or base or {}).get("coverage"),
         competition=ctx["competition"]["status"] if "competition" in ctx else StageStatus.NOT_RUN.value,
         structural_checks=detail.get("validation", {}).get("checks"),
         #TODO: Task 09 — benchmark sections (Kang arrangements, Cai topology competition, Fe–MOF-74 electronic
@@ -78,7 +104,7 @@ def build_report(spec, store, ctx, detail, status) -> dict:
                     "entries": [{k: e.get(k) for k in ("id", "title", "doi", "url", "supports", "does_not_supply")}
                                 for e in lit.get("entries", [])],
                     "note": "Listed sources and their scope only; no numerical comparison with published results."},
-        not_executed=NOT_EXECUTED,
+        not_executed=not_executed(spec),
         artifact_index={k: v["artifact_id"] for k, v in sorted(ctx.items()) if isinstance(v, dict) and "artifact_id" in v},
     )
 
@@ -92,10 +118,15 @@ def write_report(run_dir: Path, report: dict) -> None:
     run_dir = Path(run_dir)
     (run_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     lines = [f"# Pipeline report — {report['project_id']} ({report['case']}, correction={report['correction_mode']})", "",
-             "**Provenance: SYNTHETIC.** Abstract substitution graphs; not atomistic MOF predictions. "
-             f"Runtime agents: disabled. LLM calls: {report['llm_calls']}.", "",
-             f"Pipeline status: **{report['pipeline_status']}** — winning topology (corrected pool): "
-             f"**{report['winning_topology']}** (base: {report['base_winning_topology']})", "", "## Stages", "",
+             (f"**Provenance: {report['provenance']}.** "
+              + ("Abstract substitution graphs; not atomistic MOF predictions. " if "physical" not in report else
+                 "CIF-derived slot lattice with periodic DFT labels" + ("; labelled SYNTHETIC, not physical evidence. "
+                                                                        if report["provenance"] == "SYNTHETIC" else ". "))
+              + f"Runtime agents: disabled. LLM calls: {report['llm_calls']}."), "",
+             (f"Pipeline status: **{report['pipeline_status']}** — winning topology (corrected pool): "
+              f"**{report['winning_topology']}** (base: {report['base_winning_topology']})" if "physical" not in report else
+              f"Pipeline status: **{report['pipeline_status']}** — lowest DFT energy (base level, ties within tolerance "
+              f"listed below): **{(report['base_ranking'] or [{}])[0].get('configuration_id')}**"), "", "## Stages", "",
              _md_table([{"stage": k, "status": report["stage_status"].get(k, "COMPLETED")} for k in report["stage_order"]],
                        ["stage", "status"]), "",
              "## Per topology", ""]
@@ -108,6 +139,17 @@ def write_report(run_dir: Path, report: dict) -> None:
                   f"- feasible states: {sol.get('n_feasible')}, symmetry orbits: {sec.get('n_symmetry_orbits')}",
                   f"- base minimum: {sol.get('base_minimum_energy_eV')} eV at {sol.get('minimizing_bitstrings')} "
                   f"(orbits {sol.get('ground_state_orbits')})", ""]
+    if report.get("physical"):
+        ph = report["physical"]
+        lines += ["## Physical-project checks", "", f"- DFT cutoff convergence: {ph['dft_convergence']}",
+                  f"- split counts: {ph['split_counts']}", f"- final holdout: {ph['holdout']}",
+                  f"- transformation events: {len(ph['transformation_events'] or [])}, failed labels: "
+                  f"{len(ph['failed_labels'] or [])}", ""]
+        if report.get("base_ranking"):
+            lines += ["## DFT ranking (base level, no correction)", "",
+                      _md_table(report["base_ranking"], ["rank", "configuration_id", "base_energy_eV",
+                                                         "surrogate_base_energy_eV", "n_degenerate", "base_fidelity"]),
+                      "", f"Coverage: {report['ranking_coverage']}", ""]
     if report.get("corrected_ranking"):
         lines += ["## Corrected pooled ranking", "",
                   _md_table(report["corrected_ranking"], ["rank", "orbit_id", "topology_id", "base_energy_eV", "correction_eV",

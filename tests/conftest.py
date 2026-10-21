@@ -42,6 +42,20 @@ def copy_fixture(dst: Path, with_harness: bool = False) -> Path:
 
 
 @pytest.fixture(scope="session")
+def toy_run(tmp_path_factory):
+    """One complete SYNTHETIC toy physical-project run (CIF slot lattice + mock pw.x), shared by Milestone B tests."""
+    from toy_framework import write_toy_project
+    project = write_toy_project(tmp_path_factory.mktemp("toy_project"))
+    spec = load_project(project)
+    run_dir = tmp_path_factory.mktemp("toy_run")
+    return spec, run_dir, run_pipeline(spec, run_dir)
+
+
+def load_artifacts(run_dir, record_type):
+    return [json.loads(p.read_text()) for p in sorted((Path(run_dir) / "artifacts").glob(f"{record_type}__*.json"))]
+
+
+@pytest.fixture(scope="session")
 def runs(tmp_path_factory):
     out = {}
     for case in CASES:

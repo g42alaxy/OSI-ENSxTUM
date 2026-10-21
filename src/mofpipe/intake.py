@@ -1,8 +1,10 @@
-"""Task 01 (intake): fixture adapter and strict project validator.
+"""Task 01 (intake): fixture adapter, project loader dispatch and strict project validator.
 
 Input mode ``finite_substitution_interaction_graph`` bypasses CIF parsing and
 atomic assembly. Only learner-visible fixture files are read; ``harness/``,
-``reference_outputs/`` and the oracle sources are refused.
+``reference_outputs/`` and the oracle sources are refused. Physical projects
+(ProjectSpec v0.1 or a physical_case recipe) are loaded by ``project_spec``
+into the same dataclass, with ``project_type`` kept separate.
 """
 from __future__ import annotations
 
@@ -18,7 +20,8 @@ GRAPH_MODE = "finite_substitution_interaction_graph"
 LEARNER_FORBIDDEN_DIRS = ("harness", "reference_outputs")
 LEARNER_FORBIDDEN_FILES = ("tools/generate_fixture.py", "tools/fixture_core.py")
 CORRECTION_MODES = ("none", "constant", "topology_dependent")
-DEFAULT_SPLIT_MANIFEST = "data/split_manifest.json"  # read by the fixture README, absent from project.json inputs
+DEFAULT_SPLIT_MANIFEST = "data/split_manifest.json"  # fixture only: project.json is checksummed and omits it
+FIXTURE_PROJECT_TYPE = "synthetic_fixture"
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,7 @@ class TopologySpec:
     crystallographic_net_name: object
     atomic_coordinates: object
     provenance: str
+    pair_weights_d1: tuple = ()  # periodic contact multiplicity per pairs_d1 entry; empty means 1 each
 
     @classmethod
     def from_dict(cls, d: dict) -> "TopologySpec":
@@ -76,6 +80,8 @@ class ProjectSpec:
     building_blocks: dict
     literature: dict
     fingerprint: str = field(default="")
+    project_type: str = FIXTURE_PROJECT_TYPE
+    physical: dict | None = None  # parsed structures, protocols and load errors of a physical project
 
     @property
     def n_B(self) -> int:
@@ -130,11 +136,15 @@ def load_project(project_path, case: str | None = None, correction_mode: str | N
                  overrides: dict | None = None) -> ProjectSpec:
     project_path = Path(project_path).resolve()
     root = project_path.parent
-    #TODO: Task 01 — loader for the full ProjectSpec schema (instructions/project_spec.template.json) and the
-    #TODO: physical case (physical_case/recipe.json); only the synthetic fixture schema is supported now.
     config = json.loads(project_path.read_text())
     if overrides:
         config = _deep_merge(config, overrides)
+    if config.get("schema") != FIXTURE_SCHEMA and ("schema_version" in config or "case_id" in config):
+        # ProjectSpec v0.1 (instructions/project_spec.template.json) or a physical_case recipe.
+        if case not in (None, "physical") or correction_mode not in (None, "none"):
+            raise PipelineError("UNSUPPORTED_FOR_PHYSICAL_PROJECT", "case/correction modes belong to the synthetic fixture")
+        from .project_spec import load_physical_project
+        return load_physical_project(project_path, config)
     if case is not None:
         config["inputs"]["training"] = f"data/{case}_training.jsonl"
         config["inputs"]["development"] = f"data/{case}_development.jsonl"
@@ -176,9 +186,70 @@ def load_project(project_path, case: str | None = None, correction_mode: str | N
 
 
 # --------------------------------------------------------------------------
+def topology_checks(spec: ProjectSpec, topo: TopologySpec) -> tuple[list, list]:
+    """Slot/graph checks shared by fixture graphs and CIF-derived slot lattices."""
+    from .framework import GRAPH_REPRESENTATION
+
+    checks, errors = [], []
+
+    def check(name, ok, code, detail=""):
+        checks.append({"check": name, "passed": bool(ok)})
+        if not ok:
+            errors.append({"code": code, "check": name, "detail": detail})
+
+    tid, n, enc, counts = topo.topology_id, topo.n_sites, spec.species_encoding, spec.composition_counts
+    if spec.project_type == FIXTURE_PROJECT_TYPE:
+        check(f"{tid}:input_mode", topo.representation == GRAPH_MODE, "UNSUPPORTED_INPUT_MODE", topo.representation)
+        check(f"{tid}:provenance", topo.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH")
+        check(f"{tid}:no_physical_net_claim", topo.crystallographic_net_name is None and topo.atomic_coordinates is None,
+              "GRAPH_FIXTURE_CLAIMS_PHYSICAL_NET")
+    else:
+        check(f"{tid}:input_mode", topo.representation == GRAPH_REPRESENTATION, "UNSUPPORTED_INPUT_MODE", topo.representation)
+        check(f"{tid}:provenance", topo.provenance == spec.provenance, "PROVENANCE_MISMATCH")
+    check(f"{tid}:site_count", n == spec.n_sites and topo.site_ids == tuple(range(n)), "INVALID_SITE_COUNT")
+    check(f"{tid}:allowed_species", len(topo.allowed_species) == n and all(set(s) <= set(enc) for s in topo.allowed_species),
+          "INVALID_ALLOWED_SPECIES")
+    for species, count in counts.items():
+        hosts = sum(species in s for s in topo.allowed_species)
+        check(f"{tid}:composition_feasible:{species}", hosts >= count, "INFEASIBLE_COMPOSITION", f"{hosts}<{count}")
+    for label, terms, size in (("pairs_d1", topo.pairs_d1, 2), ("pairs_d2", topo.pairs_d2, 2), ("triplets", topo.triplets, 3)):
+        ok = all(len(t) == size and len(set(t)) == size and all(type(i) is int and 0 <= i < n for i in t) for t in terms)
+        ok = ok and len({tuple(sorted(t)) for t in terms}) == len(terms)
+        check(f"{tid}:{label}_valid", ok, "MALFORMED_INTERACTION_LIST", label)
+    check(f"{tid}:normalization", type(topo.n_formula_units) is int and topo.n_formula_units > 0,
+          "INVALID_FORMULA_UNIT_COUNT")
+    weights = topo.pair_weights_d1
+    check(f"{tid}:pair_weights", not weights or (len(weights) == len(topo.pairs_d1)
+                                                 and all(type(w) is int and w > 0 for w in weights)),
+          "MALFORMED_INTERACTION_LIST", "pair_weights_d1")
+    perms = [tuple(p) for p in topo.permutations]
+    valid = all(sorted(p) == list(range(n)) for p in perms)
+    check(f"{tid}:permutations_bijective", valid, "INVALID_SYMMETRY_OPERATION")
+    if valid:
+        pset = set(perms)
+        check(f"{tid}:group_identity", tuple(range(n)) in pset, "SYMMETRY_GROUP_NOT_CLOSED", "identity missing")
+        check(f"{tid}:group_closed", all(tuple(p[q[i]] for i in range(n)) in pset for p in perms for q in perms),
+              "SYMMETRY_GROUP_NOT_CLOSED")
+        for label, terms in (("pairs_d1", topo.pairs_d1), ("pairs_d2", topo.pairs_d2), ("triplets", topo.triplets)):
+            ref = {tuple(sorted(t)) for t in terms}
+            check(f"{tid}:symmetry_preserves_{label}",
+                  all({tuple(sorted(p[i] for i in t)) for t in ref} == ref for p in perms),
+                  "SYMMETRY_CHANGES_GRAPH", label)
+        if weights and len(weights) == len(topo.pairs_d1):
+            w = {tuple(sorted(t)): x for t, x in zip(topo.pairs_d1, weights)}
+            check(f"{tid}:symmetry_preserves_pair_weights",
+                  all(w.get(tuple(sorted((p[i], p[j])))) == x for (i, j), x in w.items() for p in perms),
+                  "SYMMETRY_CHANGES_GRAPH", "pair_weights_d1")
+    return checks, errors
+
+
 def validate_project(spec: ProjectSpec) -> dict:
     """validate_project(project_spec) -> ValidationReport (Task 01)."""
-    from .configuration_model import FEATURE_DEGREE
+    from .configuration_model import feature_degree, is_known_feature
+
+    if spec.project_type != FIXTURE_PROJECT_TYPE:
+        from .project_spec import validate_physical_project
+        return validate_physical_project(spec)
 
     checks, errors = [], []
     cfg = spec.config
@@ -210,40 +281,10 @@ def validate_project(spec: ProjectSpec) -> dict:
     #TODO: Task 03/04 — multicomponent (one-hot) species encodings and per-sublattice composition counts.
     check("binary_encoding", sorted(enc.values()) == [0, 1], "UNSUPPORTED_MULTICOMPONENT_ENCODING", str(enc))
 
-    # Topologies
-    for tid, topo in spec.topologies.items():
-        n = topo.n_sites
-        #TODO: Task 01 — CIF / periodic-net input mode: parse CIFs with provenance, resolve partial occupancy and
-        #TODO: disorder by a declared policy, check connectors and charge balance, derive slots per supercell.
-        check(f"{tid}:input_mode", topo.representation == GRAPH_MODE, "UNSUPPORTED_INPUT_MODE", topo.representation)
-        check(f"{tid}:provenance", topo.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH")
-        check(f"{tid}:no_physical_net_claim", topo.crystallographic_net_name is None and topo.atomic_coordinates is None,
-              "GRAPH_FIXTURE_CLAIMS_PHYSICAL_NET")
-        check(f"{tid}:site_count", n == spec.n_sites and topo.site_ids == tuple(range(n)), "INVALID_SITE_COUNT")
-        check(f"{tid}:allowed_species", len(topo.allowed_species) == n and all(set(s) <= set(enc) for s in topo.allowed_species),
-              "INVALID_ALLOWED_SPECIES")
-        for species, count in counts.items():
-            hosts = sum(species in s for s in topo.allowed_species)
-            check(f"{tid}:composition_feasible:{species}", hosts >= count, "INFEASIBLE_COMPOSITION", f"{hosts}<{count}")
-        for label, terms, size in (("pairs_d1", topo.pairs_d1, 2), ("pairs_d2", topo.pairs_d2, 2), ("triplets", topo.triplets, 3)):
-            ok = all(len(t) == size and len(set(t)) == size and all(type(i) is int and 0 <= i < n for i in t) for t in terms)
-            ok = ok and len({tuple(sorted(t)) for t in terms}) == len(terms)
-            check(f"{tid}:{label}_valid", ok, "MALFORMED_INTERACTION_LIST", label)
-        check(f"{tid}:normalization", type(topo.n_formula_units) is int and topo.n_formula_units > 0,
-              "INVALID_FORMULA_UNIT_COUNT")
-        perms = [tuple(p) for p in topo.permutations]
-        valid = all(sorted(p) == list(range(n)) for p in perms)
-        check(f"{tid}:permutations_bijective", valid, "INVALID_SYMMETRY_OPERATION")
-        if valid:
-            pset = set(perms)
-            check(f"{tid}:group_identity", tuple(range(n)) in pset, "SYMMETRY_GROUP_NOT_CLOSED", "identity missing")
-            check(f"{tid}:group_closed", all(tuple(p[q[i]] for i in range(n)) in pset for p in perms for q in perms),
-                  "SYMMETRY_GROUP_NOT_CLOSED")
-            for label, terms in (("pairs_d1", topo.pairs_d1), ("pairs_d2", topo.pairs_d2), ("triplets", topo.triplets)):
-                ref = {tuple(sorted(t)) for t in terms}
-                check(f"{tid}:symmetry_preserves_{label}",
-                      all({tuple(sorted(p[i] for i in t)) for t in ref} == ref for p in perms),
-                      "SYMMETRY_CHANGES_GRAPH", label)
+    for topo in spec.topologies.values():
+        local_checks, local_errors = topology_checks(spec, topo)
+        checks += local_checks
+        errors += local_errors
 
     screen = cfg.get("topology_screen", {})
     check("screen_retains_all_supplied_graphs",
@@ -260,12 +301,12 @@ def validate_project(spec: ProjectSpec) -> dict:
         if not valid:
             continue
         names = [spec.feature_order[i] for i in inds]
-        known = all(n in FEATURE_DEGREE for n in names)
+        known = all(is_known_feature(n) for n in names)
         check(f"{model['id']}:features_known", known, "UNSUPPORTED_FEATURE", str(names))
         check(f"{model['id']}:explicit_constant_term", "constant" in names, "MISSING_CONSTANT_TERM")
         check(f"{model['id']}:n_parameters", model.get("n_parameters") == len(inds), "PARAMETER_COUNT_MISMATCH")
         if known:
-            check(f"{model['id']}:declared_degree", model.get("polynomial_degree") == max(FEATURE_DEGREE[n] for n in names),
+            check(f"{model['id']}:declared_degree", model.get("polynomial_degree") == max(feature_degree(n) for n in names),
                   "POLYNOMIAL_DEGREE_MISMATCH")
 
     ms = cfg.get("model_selection", {})
@@ -298,7 +339,8 @@ def validate_project(spec: ProjectSpec) -> dict:
     check("evaluation_backend", ev.get("backend") == "synthetic_fixture", "UNSUPPORTED_EVALUATION_BACKEND")
     check("correction_mode", ev.get("correction_mode") in CORRECTION_MODES, "UNKNOWN_CORRECTION_MODE",
           str(ev.get("correction_mode")))
-    #TODO: Tasks 06/07 — allow these flags once periodic DFT, embedding and hardware backends are implemented.
+    # The fixture only uses its synthetic evaluator; periodic DFT runs in physical projects (dft.py).
+    #TODO: Task 07 — embedding and hardware backends.
     for flag in ("dft_enabled", "embedding_enabled", "hardware_enabled"):
         check(f"evaluation_{flag}_false", ev.get(flag) is False, "UNSUPPORTED_ELECTRONIC_BACKEND", flag)
     al = cfg.get("active_learning", {})

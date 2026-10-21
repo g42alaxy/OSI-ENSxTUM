@@ -50,7 +50,13 @@ class RunStore:
         return self._path(artifact_id).exists()
 
     # -- state -------------------------------------------------------------
-    def bind_project(self, fingerprint: str) -> None:
+    def bind_project(self, fingerprint: str, project_type: str = "synthetic_fixture", provenance: str = "SYNTHETIC") -> None:
+        # Synthetic and physical projects never share a run directory, whatever their fingerprints.
+        for key, value in (("project_type", project_type), ("provenance", provenance)):
+            bound = self.state.get(key)
+            if bound is not None and bound != value:
+                raise PipelineError("RUN_DIR_PROJECT_TYPE_MISMATCH", f"{key}: run dir holds {bound}, project is {value}")
+            self.state[key] = value
         current = self.state.get("project_fingerprint")
         if current is not None and current != fingerprint:
             # A changed scientific input is a new project run, never a silent resume.

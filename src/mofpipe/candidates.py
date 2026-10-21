@@ -17,7 +17,7 @@ def deduplicate_candidates(spec, topo, solver_result: dict) -> dict:
     """deduplicate_candidates(candidate_ids, symmetry_policy_id) -> CandidateSet."""
     #TODO: Task 05 — relaxed-geometry equivalence (separate from decoration dedup) without merging distinct nets,
     #TODO: conformers or magnetic states; periodic-translation canonicalisation for supercells.
-    orbits =defaultdict(list)
+    orbits = defaultdict(list)
     for bits, energy in table_from_result(solver_result):
         orbits[bit_string(canonical_bits(topo, bits))].append((bits, energy))
     rows = []
@@ -44,7 +44,7 @@ def select_pool(spec, candidate_set: dict) -> dict:
     """Best k unique orbits per graph, keeping every tie at the cutoff."""
     #TODO: Task 05 — select_evaluation_batch: declared energy/uncertainty/diversity acquisition with topology
     #TODO: coverage allocation, audit fraction for deprioritised regions and an evaluation budget.
-    k =spec.config["candidate_pool"]["top_k_unique_orbits_per_topology"]
+    k = spec.config["candidate_pool"]["top_k_unique_orbits_per_topology"]
     rows = candidate_set["candidates"]
     energies = [Fraction(r["predicted_base_energy_exact"]) for r in rows]
     cutoff = energies[min(k, len(rows)) - 1]

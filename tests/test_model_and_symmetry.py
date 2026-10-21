@@ -58,7 +58,6 @@ def test_feature_symmetry_and_swap_reachability(spec, tid):
 
 @pytest.mark.parametrize("tid", ["ring12", "prism6"])
 def test_feature_polynomials_match_counts(spec, tid):
-    from mofpipe.encoding import poly_add
     topo = spec.topologies[tid]
     for name in spec.feature_order:
         poly = cm.feature_polynomial(name, topo)

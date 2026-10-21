@@ -17,12 +17,7 @@ from .structures import configuration_id, orbit_id, validate_occupation
 
 EVALUATOR_SCRIPT = "tools/mock_evaluator.py"
 
-#TODO: Task 06 — PeriodicDFTBackend (AiiDA + aiida-quantumespresso, adapter for licensed codes) with the same
-#TODO: submit/job_status/collect interface: cell+atomic relaxation and final single point; record XC, dispersion,
-#TODO: pseudopotential hashes, cutoff, k-points, smearing, spin init, Hubbard U; converge settings for energy
-#TODO: DIFFERENCES; test declared magnetic/structural initial states and store each metastable outcome; check
-#TODO: forces/stress, inventory, topology and slot mapping after relaxation; route topology changes as
-#TODO: transformation events; bounded retries inside a declared protocol (scientific changes = new protocol).
+# Periodic DFT (Task 06) lives in dft.py (PeriodicDFTBackend) behind the same submit/job_status/collect interface.
 #TODO: Task 07 — embedding + electronic solvers: prepare_active_space (h1/h2, constants, spin counts, FCIDUMP +
 #TODO: metadata), PySCF CASCI/FCI reference, simulated VQE on the identical Hamiltonian, hardware SQD adapter,
 #TODO: and the scheme's own assemble_corrected_energy (double counting, all inequivalent nodes, UNVALIDATED status).
@@ -136,10 +131,12 @@ class SyntheticFixtureBackend:
 def electronic_stage_status(spec) -> dict:
     ev = spec.config["evaluation"]
     off = StageStatus.DISABLED_BY_CONFIG.value
+    physical = ev["backend"] == "periodic_dft"
     return {
-        "periodic_dft": off if not ev["dft_enabled"] else StageStatus.UNSUPPORTED.value,  #TODO: Task 06 DFT backend
+        "periodic_dft": off if not ev["dft_enabled"] else (StageStatus.COMPLETED.value if physical else StageStatus.UNSUPPORTED.value),
         "embedding_correction": off if not ev["embedding_enabled"] else StageStatus.UNSUPPORTED.value,  #TODO: Task 07
         "active_space_fci": StageStatus.NOT_RUN.value, "vqe": StageStatus.NOT_RUN.value,  #TODO: Task 07 PySCF / VQE
         "sqd_hardware": off if not ev["hardware_enabled"] else StageStatus.UNSUPPORTED.value,  #TODO: Task 07 SQD
-        "note": "Corrections in this run are artificial fixture bookkeeping tests, not electronic-structure results.",
+        "note": ("DFT-only ranking; no correction is applied." if physical else
+                 "Corrections in this run are artificial fixture bookkeeping tests, not electronic-structure results."),
     }

@@ -18,7 +18,7 @@ def plan_next_batch(spec, snapshot: dict, split: dict, batch_size: int, seed: in
     """Diversity-driven acquisition in feature space, restricted to training-split orbits."""
     #TODO: Task 08 — registered energy/uncertainty/diversity acquisition policy, exploration outside the preferred
     #TODO: basin, revisiting uncertain topology exclusions and untested supercell patterns.
-    labelled_orbits ={e["orbit_id"] for e in snapshot["entries"]}
+    labelled_orbits = {e["orbit_id"] for e in snapshot["entries"]}
     rng = random.Random(seed)
     batch = []
     for tid, topo in spec.topologies.items():

@@ -64,8 +64,8 @@ def make_decoration(spec, topology, bits) -> dict:
 
 def define_decoration_space(spec, topology) -> dict:
     """Integrator glue tool: the feasible fixed-composition decoration space."""
-    #TODO: Tasks 01/05 — supercell matrices (project search.supercell_matrices), periodic translations in
-    #TODO: canonicalisation and larger-cell transfer tests; only one finite 12-slot graph per topology now.
+    #TODO: Tasks 01/05 — several supercell matrices per topology and larger-cell transfer tests; one working cell
+    #TODO: per topology now (CIF slot lattices already include the supercell translations in their permutations).
     orbits = Counter(orbit_id(topology, b) for b in feasible_states(spec.n_sites, spec.n_B))
     return make_record(
         "DecorationSpace", spec.provenance, topology_id=topology.topology_id, n_sites=spec.n_sites,
@@ -121,13 +121,10 @@ def swap_graph_connected(topology, n_sites: int, n_ones: int) -> dict:
 
 
 def build_framework(spec, topology, decoration: dict) -> dict:
-    """build_framework(topology_id, decoration, builder_protocol_id) -> Geometry | BuildFailure.
+    """build_framework for graph mode: no atomic building blocks exist, so no geometry is fabricated.
 
-    No atomic building blocks exist in graph mode, so no geometry is fabricated.
+    Physical projects use framework.build_framework (parent-substitution builder).
     """
-    #TODO: Task 01 — PORMAKE builder adapter (ToBaCCo behind the same interface): build atomic framework from
-    #TODO: topology + building blocks, export CIF with atom/block/slot map and periodic adjacency, run sanity
-    #TODO: checks and return BuildFailure with reasons; verify geometry hash and inventory.
     return {"record_type": "BuildResult", "topology_id": topology.topology_id,
             "decoration": decoration["configuration_id"], "geometry": None,
             "status": StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value,
@@ -144,6 +141,8 @@ def screen_topologies(spec) -> dict:
     screen = spec.config["topology_screen"]
     decisions = [{"topology_id": tid, "state": "retain", "evidence": "NO_PHYSICAL_SCREENING_EVIDENCE"}
                  for tid in spec.topologies if tid in screen["retain"]]
+    skipped = StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value
     return make_record("ScreeningReport", spec.provenance, mode=screen["mode"], decisions=decisions,
-                       geometric_screen=StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value,
-                       ml_potential=StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value, exclusion_ledger=[])
+                       geometric_screen=screen.get("geometric_screen", skipped),
+                       ml_potential=skipped if spec.physical is None else StageStatus.DISABLED_BY_CONFIG.value,
+                       exclusion_ledger=[])

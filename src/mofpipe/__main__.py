@@ -1,4 +1,7 @@
-"""CLI: python -m mofpipe {run,accept,matrix} --project mof_no_agent_fixture/project.json"""
+"""CLI: python -m mofpipe {run,accept,matrix} --project mof_no_agent_fixture/project.json
+
+``run`` also accepts a ProjectSpec v0.1 file or a physical_case recipe (physical projects).
+"""
 from __future__ import annotations
 
 import argparse
@@ -21,6 +24,8 @@ def _run_one(project, case, correction, run_dir):
 
 
 def _accept(spec, run_dir, report):
+    if spec.project_type != "synthetic_fixture":
+        raise PipelineError("ACCEPTANCE_HARNESS_FIXTURE_ONLY", "physical projects have no harness/ answers")
     from .acceptance import check_run  # harness side, only after the run is finalised
     result = check_run(spec, {**report, "_run_dir": str(run_dir)})
     (Path(run_dir) / "acceptance.json").write_text(json.dumps(result, indent=2) + "\n")
