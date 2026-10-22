@@ -126,7 +126,7 @@ def test_replicated_cell_gives_the_same_energy_per_formula_unit(toy_backend):
         text = (store.jobs / job.replace(":", "__") / "attempt_0/pw.out").read_text()
         parsed = backend.adapter.parse_output(text, "scf", g)
         n_fu = dft.formula_units(g["inventory"], spec.physical["chemistry"]["target_elemental_inventory"])
-        energies.append(Fraction(parsed["total_energy_Ry"]) * dft.RY_TO_EV / n_fu)
+        energies.append(Fraction(parsed["total_energy"]) * dft.RY_TO_EV / n_fu)
         assert meta["state"] == "SUCCEEDED"
     assert abs(energies[0] - energies[1]) <= Fraction(str(spec.physical["tolerances"]["target_relative_energy_tolerance"]))
 

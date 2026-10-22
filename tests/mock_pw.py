@@ -71,7 +71,9 @@ def main():
     out += ["     Forces acting on atoms (cartesian axes, Ry/au):", ""]
     out += [f"     atom {k + 1:4d} type  1   force = {force:14.8f}{0.0:14.8f}{0.0:14.8f}" for k in range(nat)]
     out += ["", f"     Total force = {force * nat:12.6f}     Total SCF correction =     0.000000", ""]
-    out += ["     total   stress  (Ry/bohr**3)                   (kbar)     P=        0.10", ""]
+    out += ["     total   stress  (Ry/bohr**3)                   (kbar)     P=        0.10"]
+    out += ["  " + "  ".join("%12.8f" % (0.00000068 if r == c else 0.0) for c in range(3)) + "   "
+            + "  ".join("%10.2f" % (0.10 if r == c else 0.0) for c in range(3)) for r in range(3)] + [""]
 
     if calc in ("relax", "vc-relax"):
         final = []

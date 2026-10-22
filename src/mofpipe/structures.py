@@ -11,6 +11,19 @@ from itertools import combinations
 from .contract import PipelineError, StageStatus, bit_string, make_record
 
 
+def n_ones_of(spec, topology) -> int:
+    """Sites carrying encoding 1 in this topology's cell (fixture: the project-wide count)."""
+    return topology.n_ones if topology.n_ones is not None else spec.n_B
+
+
+def composition_of(spec, topology) -> dict:
+    return dict(topology.composition) if topology.composition else dict(spec.composition_counts)
+
+
+def states_of(spec, topology):
+    return feasible_states(topology.n_sites, n_ones_of(spec, topology))
+
+
 def validate_occupation(bits, n_sites: int, n_ones: int) -> tuple:
     """Validate length, strict integer binary values (bool rejected) and composition."""
     if not isinstance(bits, (list, tuple)) or len(bits) != n_sites:
@@ -52,7 +65,7 @@ def decode_species(bits, species_encoding: dict) -> list:
 
 def make_decoration(spec, topology, bits) -> dict:
     #TODO: Task 01 — orientation states for asymmetric linkers (finite declared catalogue) as extra decoration variables.
-    bits = validate_occupation(list(bits), spec.n_sites, spec.n_B)
+    bits = validate_occupation(list(bits), topology.n_sites, n_ones_of(spec, topology))
     species = decode_species(bits, spec.species_encoding)
     return {
         "record_type": "Decoration", "topology_id": topology.topology_id,
@@ -64,12 +77,12 @@ def make_decoration(spec, topology, bits) -> dict:
 
 def define_decoration_space(spec, topology) -> dict:
     """Integrator glue tool: the feasible fixed-composition decoration space."""
-    #TODO: Tasks 01/05 — several supercell matrices per topology and larger-cell transfer tests; one working cell
-    #TODO: per topology now (CIF slot lattices already include the supercell translations in their permutations).
-    orbits = Counter(orbit_id(topology, b) for b in feasible_states(spec.n_sites, spec.n_B))
+    # Transfer supercells are separate TopologySpecs (project_spec._load_source, transfer.py).
+    #TODO: Tasks 01/05 — non-diagonal supercell matrices.
+    orbits = Counter(orbit_id(topology, b) for b in states_of(spec, topology))
     return make_record(
-        "DecorationSpace", spec.provenance, topology_id=topology.topology_id, n_sites=spec.n_sites,
-        composition=spec.composition_counts, encoding=spec.species_encoding,
+        "DecorationSpace", spec.provenance, topology_id=topology.topology_id, n_sites=topology.n_sites,
+        composition=composition_of(spec, topology), encoding=spec.species_encoding,
         bit_order="bits[i] is site i; string leftmost character is site 0",
         n_feasible=sum(orbits.values()), n_symmetry_orbits=len(orbits),
         orbit_sizes=dict(sorted(orbits.items())),
@@ -86,7 +99,7 @@ def check_candidate_file(spec, spaces: dict) -> dict:
         topo = spec.topologies.get(row.get("topology_id"))
         if topo is None:
             raise PipelineError("UNKNOWN_TOPOLOGY", str(row.get("topology_id")))
-        bits = validate_occupation(row["bits"], spec.n_sites, spec.n_B)
+        bits = validate_occupation(row["bits"], topo.n_sites, n_ones_of(spec, topo))
         if row["configuration_id"] != configuration_id(topo, bits):
             raise PipelineError("CONFIGURATION_ID_MISMATCH", row["configuration_id"])
         if row["orbit_id"] != orbit_id(topo, bits):

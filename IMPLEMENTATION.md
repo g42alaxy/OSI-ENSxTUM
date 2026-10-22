@@ -1,29 +1,35 @@
 # What is implemented in `mofpipe`, and what the tests check
 
-`src/mofpipe/` is a deterministic implementation of the pipeline specified in `instructions/`, with runtime LLM agents switched off. It covers two milestones of `instructions/10_AGENT_ARCHITECTURE.md`:
+`src/mofpipe/` is a deterministic implementation of the pipeline specified in `instructions/`, with runtime LLM agents switched off. It covers three milestones of `instructions/10_AGENT_ARCHITECTURE.md`:
 
 - **Milestone A:** schemas, persistence, job lifecycle and one tiny synthetic end-to-end fixture. It runs on `mof_no_agent_fixture/`, whose two 12-site substitution graphs (`ring12`, `prism6`) are **abstract test problems, not atomistic MOFs**.
-- **Milestone B** (section 4): physical projects. A single binary topology goes from a CIF through built frameworks and periodic DFT labels to a grouped-validated energy model and a DFT ranking. It is verified only on a **SYNTHETIC** toy framework driven by a mock `pw.x`.
+- **Milestone B** (section 4): physical projects. A single binary topology goes from a CIF through built frameworks and periodic DFT labels to a grouped-validated energy model and a DFT ranking.
+- **Milestone C** (section 6): several candidate topologies on one common formula unit, transferable cluster features, supercell transfer checks, declared acquisition with refinement rounds and stopping rules, relaxed-geometry deduplication, reference-phase competition, structural validation and the final report.
+
+Periodic DFT runs through an engine adapter (section 5). **PySCF** is the primary engine: Gaussian-and-plane-waves (GPW) DFT on CPU or, through gpu4pyscf, on GPU. The Quantum ESPRESSO `pw.x` adapter is kept. The physical path is verified in three ways:
+- the full Milestone B and C pipelines on **SYNTHETIC** toy frameworks driven by a mock `pw.x`, which test the bookkeeping;
+- PySCF on tiny cells, where energies, forces, stress, k-point folding and relaxations are checked against independent calculations and finite differences;
+- an opt-in PySCF end-to-end run on a SYNTHETIC aluminium-formate toy. At the shipped 20/25/30 Ha cutoff series it stops, correctly, at the cutoff-convergence gate (`DFT_SETTINGS_NOT_CONVERGED`): the energy difference between two decorations goes 2.94 → 0.66 → 0.03 Ha, grid error of the hard O/F GTH pseudopotentials. A completing PySCF run of a physical project has not been done here.
 
 Passing results prove that the software path and its bookkeeping are correct. They say nothing about real MOF energetics. Everything not implemented is listed in [TODO.md](TODO.md).
 
-Python ≥ 3.10, standard library only; pytest for tests. About 4,350 lines of pipeline code and 1,550 lines of tests.
+Python ≥ 3.10. The pipeline core is standard-library Python. The PySCF engine needs `pyscf`, `pyscf-dispersion` and `ase` (`pyproject.toml`); the GPU switch also needs `gpu4pyscf`; tests use pytest. About 6,400 lines of pipeline code and 2,250 lines of tests.
 
 ```bash
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs   # 6 runs + acceptance
-python3 tests/toy_framework.py runs/toy_project                                                  # write the SYNTHETIC toy physical project
-PYTHONPATH=src python3 -m mofpipe run --project runs/toy_project/project.json                    # CIF -> DFT (mock pw.x) -> model -> ranking
-python3 -m pytest                                                                                 # 161 tests
+.venv/bin/python -m pytest -m "not pyscf"                                                       # 183 tests, ~3 min
+.venv/bin/python -m pytest -m pyscf                                                             # 23 real-DFT checks, minutes
+MOFPIPE_SLOW_TESTS=1 .venv/bin/python -m pytest -m pyscf -k end_to_end                          # PySCF pipeline on the formate toy
 ```
 
 ## 1. What the pipeline does
 
-Thirteen stages run in a fixed order. Each one commits immutable artifacts to the run store; a failing stage halts the later ones, but the report is always written.
+Fourteen stages run in a fixed order. Each one commits immutable artifacts to the run store; a failing stage halts the later ones, but the report is always written.
 
 ```mermaid
 flowchart LR
   A[intake] --> B[structures] --> C[screening] --> D[labels] --> E[refinement] --> F[model_selection]
-  F --> G[encoding] --> H[optimization] --> I[candidates] --> J[evaluation] --> K[ranking] --> L[validation] --> M[report]
+  F --> F2[supercell_checks] --> G[encoding] --> H[optimization] --> I[candidates] --> J[evaluation] --> K[ranking] --> L[validation] --> M[report]
 ```
 
 | Stage | Module | What it computes | Artifacts |
@@ -39,6 +45,7 @@ flowchart LR
 | candidates | `candidates.py` | Deduplicates by orbit within each graph. Keeps the best 5 unique orbits per graph plus every tie at the cutoff, with machine-readable selection reasons and degeneracy groups. | `CandidateSet`, `CandidatePool` |
 | evaluation | `electronic.py` | Sends the pool to the expensive-evaluation boundary: the fixture's `tools/mock_evaluator.py`, run **as a subprocess** so the learner never imports the oracle formula. Jobs have idempotency keys and states; responses are checked for identity, units, normalization, fidelity, provenance and correction arithmetic. Base and corrected energies are separate fields with separate fidelities, and these labels are never used for training. DFT, embedding, FCI, VQE and SQD are reported as not executed. | `CalculationResult` |
 | ranking | `ranking.py` | Ranks the pool separately at base and corrected level, after compatibility checks. Exact ties are recorded as true degeneracies, and coverage is stated as "screened finalist pool, not a global certificate". Reference-phase competition: `INCOMPLETE`. | `RankingReport`, `CompetitionReport` |
+| supercell_checks | `orchestrator.py` | Abstract graphs have no supercells: `SKIPPED_NO_ATOMIC_GEOMETRY`. | — |
 | validation | `ranking.py` | MOFChecker, CrystalNets, Zeo++, phonons, PXRD/NMR: all `SKIPPED_NO_ATOMIC_GEOMETRY`, never "passed". | — |
 | report | `report.py` | `report.json` and `report.md`: stage statuses, model selection with reasons, Hamiltonians, encoding checks, minima, pools, rankings, static literature (`live_review: NOT_RUN`), a list of what was not executed, and an artifact index. | `ReportArtifacts` |
 
@@ -191,12 +198,96 @@ The mock energy has a node-mediated N–N term plus a weak orientation-dependent
 | `test_physical_intake.py` (30) | **T01.1:** template → exactly the required paths, once each; template run blocks at intake and still reports; recipe → separate PHYSICAL project blocked on its missing inputs; formula parsing; physical and synthetic projects cannot share a run dir; fixture case modes refused; nested protocol fields, science-changing retry steps, unconverged-series spec, unsupported later-milestone fields; pseudopotential tampering; protocol registry files. **T01.2:** symmetry expansion and checksum; slot lattice counts, degrees, contact weights, group checks; slot mapping identical for reversed and random atom order (P1 input keeps only translations); disorder, non-integral ratio, charge, inventory, checksum and guest errors all block before any job; wrong connector/connectivity declarations; guest removal only under the declared policy. **T01.3:** every symmetry-distinct legal decoration builds with the target inventory; builds reproduce identical artifacts; CIF export round-trips; parent rebuild identical; an overlapping substituent gives `ATOM_OVERLAP` and no DFT job; PORMAKE adapter never fabricates geometry. |
 | `test_physical_dft_and_model.py` (25) | **T06.1:** QE input carries every scientific setting; relax + single point normalised by verified formula units; SCF retry changes only the declared numerics; unconverged relaxation, residual force, lost atom, topology change and crash never yield energies; reordered atoms give the same normalised energy and a symmetry image agrees within tolerance; a z-replicated cell gives the same energy per formula unit; a restarted backend reuses jobs; budget, missing executable and unconverged cutoff block. **T06.2:** full physical run completes; every ranked energy traces to a stored CalculationResult and Geometry; tolerance ties; rerun and mid-label resume submit no new DFT jobs; a build failure in the pool makes the ranking `INCOMPLETE`. **T03.2:** fewest-parameter model with the documented gauge; no orbit crosses train/holdout and folds are deterministic; `fail` gauge policy and too-tight tolerance give explicit failures; a perturbed Hamiltonian fails the holdout; gauge/ridge/recall helpers; physical and fixture snapshots never merge. |
 
-## 5. What the tests do not establish
+## 5. Periodic DFT engines (Task 06)
 
-- **Physics.** No real MOF structure, ML potential, DFT, embedding or quantum circuit is involved. The corrections are artificial bookkeeping tests. The Milestone B DFT path is exercised against a mock `pw.x` that speaks Quantum ESPRESSO's formats. Whether the input/output handling matches a real `pw.x` version still has to be checked on a real installation.
+`dft.PeriodicDFTBackend` keeps the `submit → job_status → collect` interface from Milestone B. The engine is chosen by `protocols.dft.engine` and sits behind one adapter interface (`write_input` / `parse_output`, raw output kept per attempt):
+
+| Engine | Adapter | What runs |
+|---|---|---|
+| `pyscf` | `dft.PySCFAdapter` + `pyscf_worker.py` | One subprocess per calculation in the protocol's interpreter (`command`, e.g. `[".venv/bin/python"]`). Gaussian orbitals with GTH basis sets and pseudopotentials (`basis`, `pseudo`: one name or a per-element map, so a larger metal basis can be combined with lighter organic ones). The density and potentials are on plane waves (`ke_cutoff_Ha`). `integral_scheme: multigrid` is CP2K-style multigrid GPW at the Gamma point; `fftdf` is FFT GPW with any Monkhorst–Pack mesh. DFT-D3(BJ/zero/…, optional ATM) or D4 comes from pyscf-dispersion (energy, gradient, virial). Relaxations use ASE BFGS/LBFGS/FIRE, with FrechetCellFilter for `vc-relax`. `device: gpu` runs SCF, gradients and stress through gpu4pyscf (`to_gpu`). |
+| `quantum_espresso` | `dft.QuantumEspressoAdapter` | `pw.x`, unchanged apart from the fixes listed below. |
+
+**PySCF engine details:**
+- **Identity.** At start-up the backend probes the worker interpreter. It records the versions (pyscf, pyscf-dispersion, gpu4pyscf, worker) and SHA-256 hashes of the basis and pseudopotential parameters actually loaded for every element. These are part of the protocol hash, so the fidelity changes when PySCF or its data change. The probe also refuses a protocol before any job runs:
+  - hybrid, meta-GGA or NLC functionals → `UNSUPPORTED_DFT_PROTOCOL`, because periodic forces/stress need LDA/GGA;
+  - dispersion damping parameters missing for the functional;
+  - no CUDA device for `device: gpu` → `BACKEND_UNAVAILABLE`.
+- **Units and conventions.** Energies are Hartree in the raw output and are converted exactly (`HARTREE_TO_EV = 2 × RY_TO_EV`, CODATA 2018). Stress is (1/V) dE/dε, so a compressed cell has negative diagonal stress and pressure = −tr/3.
+  - With smearing (`occupations.kind: smearing`, `method`, `sigma_Ha`), `zero_smearing_convention` selects `internal_energy`, `free_energy` or `zero_temperature_extrapolated`.
+  - Relaxations always minimise the variational energy whose derivatives the forces are: E, or F with smearing.
+- **Stress with multigrid.** PySCF's multigrid integrator has gradients but no stress, so the stress is evaluated with the FFTDF integrator at the converged GPW orbitals. This equals the derivative of the GPW energy only when both integrators agree for that density. The worker computes both energies and refuses (`STRESS_INTEGRATOR_INCONSISTENT`) when they differ by more than 1e-4 Ha per atom; the remedy is a higher `ke_cutoff_Ha` or `integral_scheme: fftdf`. The FFTDF scheme and the GPU path have their own consistent stress.
+- **k-points.** The mesh comes from `kpoint_spacing_inv_A` for each geometry. Intake refuses `multigrid` when that spacing needs more than Gamma (`UNSUPPORTED_KPOINTS_FOR_MULTIGRID`).
+- **Retries.** Only `damp`, `level_shift`, `diis_space`, `diis_start_cycle` and `max_cycle` may change between attempts.
+- **Cutoff convergence.** The convergence study varies `ke_cutoff_Ha` (`difference_convergence.ke_cutoff_Ha_series`).
+- **Not supported:** DFT+U (`UNSUPPORTED_HUBBARD_U`), hybrids, and user-supplied basis files.
+
+**Changes to the Milestone B result checks** (found in review; they apply to every engine):
+- Residual forces are acceptance criteria only for geometries the protocol relaxed (`relax`, `vc-relax`). Residual stress applies only after `vc-relax`.
+  - Previously the stress gate also ran after a fixed-cell `relax` and on its final single point, so a fixed-cell protocol would have rejected almost every label.
+  - A protocol may now declare `relaxation.calculation: "scf"` (rigid builder geometries). Every result records its `geometry_purpose`.
+- The stress check uses the full tensor (max |σᵢⱼ|) rather than the hydrostatic pressure, which let anisotropic residual stress pass. The QE parser now reads the stress tensor.
+- `pw.x` tests every Cartesian force component against `forc_conv_thr`, while the post-check uses the vector norm. The threshold is now tolerance/√3, so a relaxation QE reports as converged is no longer rejected.
+- A `vc-relax` output with final coordinates but no parseable `CELL_PARAMETERS` block is a parse error, instead of silently keeping the input cell.
+- `stress_tolerance_and_units.units` accepts `kbar` or `GPa`.
+
+**Tests (`test_pyscf_backend.py`, 23, marker `pyscf`):**
+
+| Test | Checks |
+|---|---|
+| `test_worker_energy_equals_direct_pyscf_plus_d3` | The worker's total energy equals an independent PySCF multigrid RKS energy plus the DFT-D3(BJ) energy to 1e-7 Ha; versions, data hashes, mesh and k-mesh are recorded. |
+| `test_forces_and_stress_match_finite_differences` (×2) | For multigrid (Gamma) and FFTDF (2×2×2 k-mesh), the DFT+D3 forces equal central differences of the energy (≤ 2e-4 eV/Å). The diagonal and shear stress equal strain derivatives (≤ 2e-5 eV/Å³). |
+| `test_kpoint_mesh_equals_replicated_cell_at_folded_mesh` | A primitive Si cell at a 2×2×2 mesh and the cell doubled along a₃ at 2×2×1 (both from the same k-spacing) give the same energy per primitive cell (≤ 2e-5 Ha). |
+| `test_smearing_conventions_and_reported_energy` | E_free ≤ E, E_zero = (E + E_free)/2, and the declared convention is the reported energy. |
+| `test_relax_reaches_the_declared_force_tolerance`, `test_vc_relax_reaches_the_declared_stress_tolerance` | ASE relaxations stop only when max ‖F‖ ≤ tolerance (H₂ from 1.0 Å) and max |σᵢⱼ| ≤ tolerance (Si strained by 4 %), and record the trajectory. |
+| `test_scf_failure_is_reported_without_energy`, `test_unsupported_settings_raise_typed_errors` | An unconverged SCF gives no energy. A science-changing retry key and a k-mesh with multigrid give typed errors. |
+| `test_pyscf_protocol_errors_block_at_intake` (×9) | Multigrid with a k-mesh, Hubbard U, a science-changing retry, a cutoff series without a higher cutoff, an unknown dispersion, a QE-only energy convention, a basis map missing an element, an unknown device and an unknown engine are each caught at intake with their field path. |
+| `test_engine_identity_is_part_of_the_fidelity`, `test_pyscf_job_input_carries_every_scientific_setting` | The probe records versions and per-element hashes; a different PySCF version gives a different protocol hash. The job file carries every setting. |
+| `test_probe_refusals_block_the_labels_stage` (×2) | `device: gpu` without gpu4pyscf and a hybrid functional block the labels stage before any job. |
+| `test_pyscf_physical_pipeline_end_to_end` (opt-in) | The physical pipeline on the SYNTHETIC aluminium-formate toy with real GPW single points. At the shipped cutoffs it must stop at labels with a named code (it does: `DFT_SETTINGS_NOT_CONVERGED`). With a converged cutoff every ranked energy must trace to its Hartree raw energy. |
+
+## 6. Milestone C: several topologies, transfer, refinement, references
+
+| Piece | What it does | Module |
+|---|---|---|
+| Several topologies | `candidate_topology_ids` may list several structures, one `source_structures` entry each, with their own supercell matrices. Slot counts, encoded-site counts, composition and formula units are per topology (`TopologySpec.n_ones`, `composition`). Every topology is checked against the same `target_elemental_inventory`, and labels share one comparison group (formula unit + DFT fidelity), so the pooled ranking compares like with like. The cutoff convergence study covers the difference inside each topology and the cross-topology difference that the pooled ranking relies on. | `project_spec.py`, `orchestrator.py` |
+| Cluster orbits (T03.1) | Point and pair clusters of slots are classified by the parent space group (rotation + fractional + lattice translation). Orbit identities therefore do not depend on the supercell, and inequivalent pairs at equal distance stay separate (the toy has two inequivalent 8.1 Å orbits). Features are counts per formula unit with every periodic image. Model candidates request them as tokens: `point_orbits`, and `pairs<=R` for every pair orbit with slot-centroid distance ≤ R Å. | `clusters.py`, `configuration_model.py` |
+| Supercells (T01.5) | Extra supercell matrices are transfer cells (`<topology>@AxBxC`). The structures stage checks exactly that every working-cell orbit, replicated, has identical features and lands in one transfer orbit. The `supercell_checks` stage then runs DFT on: <br>• replicated low-energy labels, which must match the working-cell energy within tolerance; <br>• seeded native transfer-cell orderings, compared with the working-cell model's per-formula-unit predictions. <br>Failures are reported (`TRANSFER_VALIDATION_FAILED`). Intake refuses non-transferable features (`unlike_distance_*`, `site_orbit_*`) when transfer cells exist. | `transfer.py` |
+| Acquisition (T05.2) | Policy `protocols.acquisition` sets `batch_size`, `weights` (energy, uncertainty, diversity), `audit_fraction`, `min_per_topology` and `seed`. <br>• Scores: the normalised predicted energy, the committee spread of the grouped-CV fold models (not a bound), and the feature-space distance to labelled and already-chosen orbits. <br>• A seeded audit share comes from the deprioritised half. <br>• Quota beyond the minimum goes to topologies by need: CV error, failing model, few labels. <br>• Only unlabelled, never-attempted orbits outside the frozen holdout are eligible. <br>Each pick records its reason, score components and the model it used. | `acquisition.py` |
+| Refinement (T08.1/T08.2) | Enabled by `protocols.stopping` (`max_rounds`) together with `tolerances.consecutive_stable_rounds`. Each round refits every topology by grouped CV, acquires a batch and labels it by DFT. Stop reasons: <br>• `CONVERGED_WITHIN_SCOPE`: every topology passes and the leading set (orbits within tolerance of the k-th lowest prediction, per topology and pooled) is unchanged for the declared number of rounds; <br>• `MODEL_INADEQUATE`: every candidate is well determined and fails; <br>• `INCONCLUSIVE`: a topology needs labels and has none left; <br>• `BUDGET_EXHAUSTED`: round cap or DFT budget. <br>Interrupted rounds resume from the job cache. | `refinement.py`, `orchestrator.py` |
+| Relaxed-geometry dedup (T05.1) | Two relaxed structures are equivalent if they have the same inventory and magnetic state, lattices within 1 %, and an operation of the parent space group × supercell translations maps every atom onto a same-element atom within `protocols.validation.geometry_equivalence_tolerance_A`. Energies are never used. The classes are the CV groups and are reported for the evaluated pool. | `geometry_match.py` |
+| References (T09.2) | `protocols.validation.reference_phases: "pure_endpoints"` evaluates every topology with all slots of one species; these are normalised per cell. The mixture balance min Σcᵢ Eᵢ subject to Σcᵢ·inventoryᵢ = target, c ≥ 0 is solved exactly over the basic feasible solutions. Mixing energies are reported per finalist, and the competition stays `INCOMPLETE` unless the project declares its reference set complete. | `references.py` |
+| Validation (T09.1) | Every finalist gets: <br>• post-relaxation slot/node mapping; <br>• residual force/stress, or `NOT_APPLICABLE` for rigid geometries; <br>• minimum interatomic distance; <br>• metal coordination numbers against the parent; <br>• cell distortion. <br>MOFChecker and Zeo++ run when installed, otherwise `SKIPPED_TOOL_UNAVAILABLE`. Phonons, PXRD, NMR and CrystalNets are `NOT_RUN`. | `validation.py` |
+| Report | Adds the refinement rounds, transfer checks, reference competition, finalist validation, relaxed-geometry classes, cluster catalogue, search coverage per topology and a reproducibility manifest (inputs, fidelity, engine identity, job counts). | `report.py` |
+
+**Toy result** (`write_toy_milestone_c_project`, mock `pw.x`, ~50 s):
+- **Inputs.** `toy_pcu` (2×2×1 working cell, 2×2×2 transfer cell) and its staggered polymorph (2×2×1), each with 56 orbits.
+- **Labels.** The cutoff is converged for both topologies and the cross difference. There are 9 seed labels plus 3 holdout per topology.
+- **Refinement.** Converged after one acquisition round, at 11 labels per topology.
+- **Model.** The two-shell cluster model was selected for both topologies; the holdout RMSE is ≤ 0.17 meV per formula unit.
+- **Transfer.** Replication agrees to 0.65 meV per formula unit; the native transfer RMSE is 0.9 meV (tolerance 5 meV).
+- **Ranking and references.** The pooled ranking spans both structures. All 4 pure endpoints are evaluated; the competition is `INCOMPLETE` because the reference set is not declared complete.
+
+**Tests (`test_milestone_c.py`, 22):**
+- **Full run.** Common reference and cross-topology convergence; every report section present; rerun and an interrupted refinement submit no new DFT jobs.
+- **Cluster orbits.** Inequivalent equal-distance pairs stay separate; symmetry invariance; the polynomial equals the count.
+- **Transfer.** Exact replication of features and orbits; a deliberately wrong model fails the transfer check; native states are seeded and are not replicas.
+- **Acquisition.** Picks come only from unlabelled orbits and carry reasons, including audit picks; selection is reproducible from its seed; the under-sampled, failing topology gets the larger quota.
+- **Stopping.** Convergence needs consecutive stable rounds; a moving leading set at the round cap is `BUDGET_EXHAUSTED`; an exhausted pool is `INCONCLUSIVE`; well-determined failure is `MODEL_INADEQUATE`. A full run whose round cap comes before stability is `BUDGET_EXHAUSTED`, not `COMPLETED`.
+- **Geometry equivalence.** A symmetry image with reordered atoms and noise is equivalent; another decoration or another magnetic state is not.
+- **References.** The exact mixture balance picks the lower polymorph; an unreachable composition gives no balance; missing references keep the competition `INCOMPLETE`.
+- **Validation.** Absent tools are reported as skipped; an overlapping atom fails the distance check.
+- **Intake.** Errors for: missing transfer policy, non-transferable features, missing stable-round count, negative weights, a topology/source mismatch, an unknown reference set. Each topology keeps its own cell counts.
+
+## 7. What the tests do not establish
+
+- **MOF physics.** No real MOF structure, ML potential, embedding or quantum circuit is involved. The fixture corrections are artificial bookkeeping tests.
+  - The PySCF engine is checked against independent PySCF calculations and finite differences on tiny cells (Si₂, H₂), and end to end on a SYNTHETIC formate toy. That shows the energies, forces and stresses it returns are the derivatives of the energy it reports. It does not show that a minimal GTH basis, a given cutoff or Gamma-point sampling is adequate for a MOF; that is what the convergence studies of a real project must establish.
+  - The QE adapter is exercised only against a mock `pw.x`; its input/output handling still has to be checked on a real installation.
+  - The GPU path follows the gpu4pyscf 1.8 API but has never run here: no CUDA device was available.
 - **Scaling.** Exact enumeration and the 2ⁿ encoding check are feasible only for these 12-site graphs.
 - **Real-data model selection.** The near-zero RMSE threshold is valid only because the fixture labels are exact.
-- **Active-learning quality.** The tests show the loop is bounded, holdout-safe and stops honestly. They do not show that its acquisition policy is efficient.
+- **Active-learning quality.** The tests show the loops are bounded, holdout-safe, reproducible from their seed and stop honestly. They do not show that the acquisition policy is efficient on real data.
+- **Topology identity.** The two Milestone C toy structures are a conformational pair on the same net. The code treats each parent CIF as a candidate structure; it does not verify that two CIFs are different nets (CrystalNets/MOFid are not wired).
 - **Agents.** Only proposal validation is tested; no agent ever runs.
 
 See [TODO.md](TODO.md) for what each missing piece requires.

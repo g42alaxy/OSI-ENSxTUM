@@ -14,7 +14,7 @@ from fractions import Fraction
 from .configuration_model import predict
 from .contract import PipelineError, StageStatus, bit_string, make_record
 from .encoding import _IntPoly
-from .structures import feasible_states
+from .structures import n_ones_of, states_of
 
 
 def exact_enumeration(spec, topo, hamiltonian: dict, encoding: dict | None = None) -> dict:
@@ -24,7 +24,7 @@ def exact_enumeration(spec, topo, hamiltonian: dict, encoding: dict | None = Non
     start = time.perf_counter()
     table = []
     encoded = _IntPoly(encoding) if encoding is not None else None
-    for bits in feasible_states(spec.n_sites, spec.n_B):
+    for bits in states_of(spec, topo):
         energy = predict(hamiltonian, topo, bits)
         if encoded is not None and encoded(bits) != energy:
             # On feasible states the penalty vanishes, so the encoding must equal the physical energy.
@@ -47,7 +47,7 @@ def simulated_annealing(spec, topo, hamiltonian: dict, seed: int, n_starts: int 
                         t_start: float = 0.05, t_end: float = 1e-4) -> dict:
     """Multi-start annealing with composition-preserving A/B swaps; uncertified heuristic."""
     rng = random.Random(seed)
-    n, k = spec.n_sites, spec.n_B
+    n, k = topo.n_sites, n_ones_of(spec, topo)
     per_start = []
     for _ in range(n_starts):
         ones = set(rng.sample(range(n), k))

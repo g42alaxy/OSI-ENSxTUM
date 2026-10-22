@@ -13,24 +13,67 @@ NOT_EXECUTED = ["atomic construction (PORMAKE/ToBaCCo)", "ML-potential relaxatio
                 "finite-temperature ensembles (out of scope)"]
 EXECUTED_IN_PHYSICAL_PROJECTS = ("atomic construction (PORMAKE/ToBaCCo)", "periodic DFT")
 NOT_EXECUTED_PHYSICAL = ["PORMAKE/ToBaCCo builder (parent-substitution builder used)", "linker orientation search (T01.4)",
-                         "larger-supercell transfer test (T01.5)", "calibrated model uncertainty (T03.3)"]
+                         "calibrated model uncertainty (T03.3)", "triplet cluster orbits (T03.1)",
+                         "CrystalNets/MOFid net identification"]
+PHYSICAL_EXECUTED = ("MOFChecker/CrystalNets/Zeo++", "reference phase-competition energies")
 
 
 def not_executed(spec) -> list:
     if spec.project_type == "synthetic_fixture":
         return NOT_EXECUTED
-    return [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS] + NOT_EXECUTED_PHYSICAL
+    out = [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS + PHYSICAL_EXECUTED] + NOT_EXECUTED_PHYSICAL
+    physical = spec.physical or {}
+    if not any((physical.get("transfer_topologies") or {}).values()):
+        out.append("larger-supercell transfer test (T01.5): no transfer cell declared")
+    if not (physical.get("protocols") or {}).get("stopping"):
+        out.append("active learning (T08): protocols.stopping is null")
+    if ((physical.get("protocols") or {}).get("validation") or {}).get("reference_phases") is None:
+        out.append("reference phase-competition energies (T09.2): no reference set declared")
+    return out
 
 
-def _physical_section(ctx, detail) -> dict:
+def _physical_section(spec, store, ctx, detail) -> dict:
     labels, selection = detail.get("labels") or {}, detail.get("model_selection") or {}
+    refinement = ctx.get("refinement")
+    competition = ctx.get("competition") or {}
+    dft_results = [v for k, v in ctx.items() if k.startswith("dftcalc/") and v.get("status") == "SUCCEEDED"]
+    identity = next((r.get("engine_identity") for r in dft_results if r.get("engine_identity") is not None), None)
     return {
         "dft_convergence": labels.get("dft_convergence"), "split_counts": labels.get("split_counts"),
-        "transformation_events": labels.get("transformation_events"), "failed_labels": labels.get("failed_labels"),
+        "transformation_events": (labels.get("transformation_events") or []) + ((detail.get("refinement") or {}).get("transformation_events") or []),
+        "failed_labels": (labels.get("failed_labels") or []) + ((detail.get("refinement") or {}).get("failed_labels") or []),
         "holdout": selection.get("holdout"), "labelled_ground_state_recovered": selection.get("labelled_ground_state_recovered"),
         "atomic_construction": (detail.get("structures") or {}).get("atomic_construction"),
+        "cluster_catalogue": (detail.get("structures") or {}).get("cluster_catalogue"),
+        "supercell_replication": (detail.get("structures") or {}).get("supercell_replication"),
+        "refinement": ({"stop_reason": refinement["stop_reason"], "criterion": refinement["criterion"],
+                        "rounds": [{k: r.get(k) for k in ("round", "n_labels", "selected", "cv_rmse_eV", "diagnosis",
+                                                          "stable_rounds", "acquired")} for r in refinement["rounds"]]}
+                       if refinement else None),
+        "supercell_transfer": {k[len("transfer/"):]: {f: v[f] for f in ("status", "transfer_rmse_eV", "tolerance_eV",
+                                                                        "replication", "native")}
+                               for k, v in ctx.items() if k.startswith("transfer/")},
+        "competition": {k: competition.get(k) for k in ("status", "coverage", "reference_set", "missing_references",
+                                                         "reference_mixture", "mixing_energies", "reason")},
+        "structure_validation": (detail.get("validation") or {}).get("finalists"),
+        "relaxed_geometry_classes": (detail.get("evaluation") or {}).get("relaxed_geometry_classes"),
         "geometry_ids": sorted(v["artifact_id"] for k, v in ctx.items() if k.startswith("geometry/")),
         "evaluation_not_evaluated": (detail.get("evaluation") or {}).get("not_evaluated"),
+        "search_coverage": {tid: {"n_feasible": (ctx.get(f"space/{tid}") or {}).get("n_feasible"),
+                                  "n_orbits": (ctx.get(f"space/{tid}") or {}).get("n_symmetry_orbits"),
+                                  "n_labelled": (ctx.get("train") or {}).get("per_topology", {}).get(tid),
+                                  "n_holdout": (ctx.get("holdout") or {}).get("per_topology", {}).get(tid),
+                                  "n_pool_evaluated": (ctx.get(f"pool/{tid}") or {}).get("n_selected"),
+                                  "solver": (ctx.get(f"solver/{tid}") or {}).get("optimality_status")}
+                            for tid in spec.topologies},
+        "reproducibility_manifest": {
+            "project_fingerprint": spec.fingerprint, "sources": [{k: s.get(k) for k in ("topology_id", "cif", "sha256", "source")}
+                                                                  for s in spec.physical["sources"]],
+            "dft_protocol_id": (spec.physical["protocols"].get("dft") or {}).get("protocol_id"),
+            "dft_fidelity": next((r["base_fidelity"] for r in dft_results), None), "engine_identity": identity,
+            "dft_jobs_submitted": store.state["counters"].get("dft_submissions", 0),
+            "dft_cache_hits": store.state["counters"].get("dft_cache_hits", 0),
+            "rerun": "python -m mofpipe run --project <project.json> --run-dir <dir>; identical inputs reuse every job"},
     }
 
 
@@ -80,7 +123,7 @@ def build_report(spec, store, ctx, detail, status) -> dict:
                                                   StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value)
                                for s in status if s != "report") else "FAILED_OR_INCOMPLETE"
     extra = {} if spec.project_type == "synthetic_fixture" else {
-        "project_type": spec.project_type, "physical": _physical_section(ctx, detail),
+        "project_type": spec.project_type, "physical": _physical_section(spec, store, ctx, detail),
         "base_pool_minima_eV": base["pool_minima_eV"] if base else None}
     return make_record(
         "ReportArtifacts", spec.provenance, **extra, project_id=spec.project_id, case=spec.case,
@@ -89,7 +132,8 @@ def build_report(spec, store, ctx, detail, status) -> dict:
         runtime_agents_enabled=False, llm_calls=store.state["counters"].get("llm_calls", 0), network_calls=0,
         stage_status=dict(status), completed_software_stages=sorted(executed),
         stage_detail={k: v for k, v in detail.items() if k in ("structures", "labels", "refinement", "model_selection",
-                                                               "encoding", "optimization", "candidates", "evaluation", "ranking")},
+                                                               "supercell_checks", "encoding", "optimization", "candidates",
+                                                               "evaluation", "ranking", "validation")},
         topologies={tid: _topology_section(spec, ctx, tid) for tid in spec.topologies},
         winning_topology=(corrected or base or {}).get("winning_topology"),
         base_winning_topology=base["winning_topology"] if base else None,
@@ -145,11 +189,31 @@ def write_report(run_dir: Path, report: dict) -> None:
                   f"- split counts: {ph['split_counts']}", f"- final holdout: {ph['holdout']}",
                   f"- transformation events: {len(ph['transformation_events'] or [])}, failed labels: "
                   f"{len(ph['failed_labels'] or [])}", ""]
+        if ph.get("refinement"):
+            ref = ph["refinement"]
+            lines += ["## Refinement (active learning)", "", f"Stop reason: **{ref['stop_reason']}** — {ref['criterion']}", "",
+                      _md_table([{**r, "acquired": len(r.get("acquired") or [])} for r in ref["rounds"]],
+                                ["round", "n_labels", "selected", "cv_rmse_eV", "stable_rounds", "acquired"]), ""]
+        if ph.get("supercell_transfer"):
+            lines += ["## Supercell transfer checks", "",
+                      _md_table([{"transfer_cell": k, **{f: v[f] for f in ("status", "transfer_rmse_eV", "tolerance_eV")}}
+                                 for k, v in ph["supercell_transfer"].items()],
+                                ["transfer_cell", "status", "transfer_rmse_eV", "tolerance_eV"]), ""]
         if report.get("base_ranking"):
-            lines += ["## DFT ranking (base level, no correction)", "",
-                      _md_table(report["base_ranking"], ["rank", "configuration_id", "base_energy_eV",
+            lines += ["## DFT ranking (base level, no correction; pooled over topologies)", "",
+                      _md_table(report["base_ranking"], ["rank", "configuration_id", "topology_id", "base_energy_eV",
                                                          "surrogate_base_energy_eV", "n_degenerate", "base_fidelity"]),
                       "", f"Coverage: {report['ranking_coverage']}", ""]
+        comp = ph.get("competition") or {}
+        if comp.get("mixing_energies"):
+            lines += ["## Reference-phase competition", "", f"Status: **{comp['status']}** — coverage: {comp['coverage']}", "",
+                      _md_table(comp["mixing_energies"], ["configuration_id", "topology_id", "mixing_energy_eV_per_fu",
+                                                          "versus_references"]), ""]
+        if ph.get("structure_validation"):
+            lines += ["## Structural validation of finalists", "",
+                      _md_table([{**f, "external_tools": ", ".join(f"{k}: {v}" for k, v in f["external_tools"].items())}
+                                 for f in ph["structure_validation"]],
+                                ["configuration_id", "status", "failed_checks", "external_tools"]), ""]
     if report.get("corrected_ranking"):
         lines += ["## Corrected pooled ranking", "",
                   _md_table(report["corrected_ranking"], ["rank", "orbit_id", "topology_id", "base_energy_eV", "correction_eV",

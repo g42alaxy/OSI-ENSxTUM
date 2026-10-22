@@ -10,12 +10,15 @@ import math
 from fractions import Fraction
 from functools import lru_cache
 
+from . import clusters
 from .contract import PipelineError, StageStatus, content_hash, exact, make_record
+from .structures import composition_of
 
-#TODO: Task 03 — generate symmetry-orbit cluster features (site/pair/triplet incl. periodic images and orientation
-#TODO: variables) from the slot lattice instead of this fixed library; icet only after a validated slot mapping.
+#TODO: Task 03 — triplet cluster orbits and orientation variables (T01.4) in the generated cluster basis.
 FEATURE_DEGREE = {"constant": 0, "unlike_distance_1": 2, "unlike_distance_2": 2, "BBB_paths": 3}
-SITE_ORBIT_PREFIX = "site_orbit_"  # B count on the k-th symmetry orbit of slots (point clusters)
+SITE_ORBIT_PREFIX = "site_orbit_"  # B count on the k-th symmetry orbit of slots in this cell (not transferable)
+CLUSTER_PREFIXES = {"point_orbit_": 1, "pair_orbit_": 2}  # clusters.py: parent-lattice orbits, per formula unit
+TRANSFERABLE = ("constant",) + tuple(CLUSTER_PREFIXES)
 
 
 @lru_cache(maxsize=None)
@@ -27,14 +30,54 @@ def site_orbits(topo) -> tuple:
     return tuple(tuple(sorted(o)) for _, o in sorted(orbits.items()))
 
 
+def _cluster_prefix(name: str):
+    return next((p for p in CLUSTER_PREFIXES if name.startswith(p) and name[len(p):].isdigit()), None)
+
+
 def is_known_feature(name: str) -> bool:
-    return name in FEATURE_DEGREE or (name.startswith(SITE_ORBIT_PREFIX) and name[len(SITE_ORBIT_PREFIX):].isdigit())
+    return (name in FEATURE_DEGREE or (name.startswith(SITE_ORBIT_PREFIX) and name[len(SITE_ORBIT_PREFIX):].isdigit())
+            or _cluster_prefix(name) is not None)
+
+
+def is_transferable(name: str) -> bool:
+    """Defined on the parent lattice per formula unit, so comparable between supercells."""
+    return name == "constant" or _cluster_prefix(name) is not None
 
 
 def feature_degree(name: str) -> int:
     if not is_known_feature(name):
         raise PipelineError("UNSUPPORTED_FEATURE", name)
+    prefix = _cluster_prefix(name)
+    if prefix:
+        return CLUSTER_PREFIXES[prefix]
     return 1 if name.startswith(SITE_ORBIT_PREFIX) else FEATURE_DEGREE[name]
+
+
+def expand_tokens(tokens, topo) -> list:
+    """Candidate tokens -> this topology's feature names ('site_orbits', 'point_orbits', 'pairs<=R' expand)."""
+    out = []
+    for token in tokens:
+        if token == "site_orbits":
+            out += [f"{SITE_ORBIT_PREFIX}{k}" for k in range(len(site_orbits(topo)))]
+        elif token == "point_orbits" or token.startswith("pairs<="):
+            out += clusters.names_for_token(topo, token)
+        else:
+            out.append(token)
+    return out
+
+
+def model_features(spec, topo, model) -> list:
+    """Feature names of one candidate model for one topology (fixture: global indices; physical: tokens)."""
+    if "tokens" in model:
+        return expand_tokens(model["tokens"], topo)
+    return [spec.feature_order[i] for i in model["feature_indices"]]
+
+
+def all_model_features(spec, topo) -> list:
+    names = []
+    for model in spec.model_candidates:
+        names += [n for n in model_features(spec, topo, model) if n not in names]
+    return names
 
 
 def _orbit_sites(name: str, topo) -> tuple:
@@ -44,9 +87,11 @@ def _orbit_sites(name: str, topo) -> tuple:
     return orbits[k]
 
 
-def feature_value(name: str, topo, bits) -> int:
+def feature_value(name: str, topo, bits):
     if name == "constant":
         return 1
+    if _cluster_prefix(name):
+        return clusters.cluster_value(topo, name, bits)
     if name.startswith(SITE_ORBIT_PREFIX):
         return sum(bits[i] for i in _orbit_sites(name, topo))
     if name == "unlike_distance_1":
@@ -72,6 +117,8 @@ def feature_polynomial(name: str, topo) -> dict:
 
     if name == "constant":
         add((), 1)
+    elif _cluster_prefix(name):
+        return clusters.cluster_polynomial(topo, name)
     elif name in ("unlike_distance_1", "unlike_distance_2"):
         # [x_i != x_j] = x_i + x_j - 2 x_i x_j, times the periodic contact multiplicity (distance 1)
         pairs = topo.pairs_d1 if name == "unlike_distance_1" else topo.pairs_d2
@@ -146,7 +193,7 @@ def fit_and_select(spec, topo, train: dict, dev: dict) -> dict:
     dv = [e for e in dev["entries"] if e["topology_id"] == topo.topology_id]
     results = []
     for model in spec.model_candidates:
-        names = [spec.feature_order[i] for i in model["feature_indices"]]
+        names = model_features(spec, topo, model)
         base = {"model_id": model["id"], "features": names, "n_parameters": len(names),
                 "polynomial_degree": max(feature_degree(n) for n in names)}
         try:
@@ -193,8 +240,8 @@ def hamiltonian_from_selection(spec, topo, selection: dict) -> dict:
         validation={"training_rmse_eV": chosen["training_rmse_eV"], "development_rmse_eV": chosen["development_rmse_eV"]},
         uncertainty={"kind": "development_residual_rmse", "value_eV": chosen["development_rmse_eV"],
                      "note": "noiseless synthetic labels; not a certified physical error bound"},
-        validity_domain={"topology_id": topo.topology_id, "n_sites": spec.n_sites,
-                         "composition": spec.composition_counts, "fidelity": selection["label_fidelity"]},
+        validity_domain={"topology_id": topo.topology_id, "n_sites": topo.n_sites,
+                         "composition": composition_of(spec, topo), "fidelity": selection["label_fidelity"]},
     )
 
 
@@ -276,7 +323,7 @@ def fit_and_select_grouped(spec, topo, train: dict, groups: dict) -> dict:
     The final holdout is not an input here; it is evaluated once after selection (evaluate_holdout).
     """
     #TODO: Task 03 — calibrated predictive uncertainty from held-out residuals and multifidelity (matched-difference)
-    #TODO: models for ML / DFT / embedded-corrected labels; larger-supercell transfer metric (needs T01.5).
+    #TODO: models for ML / DFT / embedded-corrected labels. (Supercell transfer metric: transfer.py.)
     physical = spec.physical
     policy = physical["protocols"]["model_selection"]
     tol = Fraction(str(physical["tolerances"]["target_relative_energy_tolerance"]))
@@ -292,7 +339,7 @@ def fit_and_select_grouped(spec, topo, train: dict, groups: dict) -> dict:
         raise PipelineError("INSUFFICIENT_GROUPS_FOR_CV", f"{topo.topology_id}: {len(set(entry_groups))} groups")
     results = []
     for model in spec.model_candidates:
-        names = [spec.feature_order[i] for i in model["feature_indices"]]
+        names = model_features(spec, topo, model)
         x_all = [feature_vector(topo, e["bits"], names) for e in entries]
         kept, dropped = independent_columns(x_all, names)
         base = {"model_id": model["id"], "features_declared": names, "n_parameters_declared": len(names)}
@@ -306,10 +353,11 @@ def fit_and_select_grouped(spec, topo, train: dict, groups: dict) -> dict:
         base.update(features=eff, dropped_dependent_features=dropped, n_parameters=len(eff),
                     polynomial_degree=max(feature_degree(n) for n in eff))
         try:
-            oof = [None] * len(entries)
+            oof, fold_coefs = [None] * len(entries), []
             for fold in sorted(set(folds.values())):
                 fit_idx = [i for i, g in enumerate(entry_groups) if folds[g] != fold]
                 coef = ridge_exact([x[i] for i in fit_idx], [y[i] for i in fit_idx], alpha, const)
+                fold_coefs.append([str(c) for c in coef])
                 for i, g in enumerate(entry_groups):
                     if folds[g] == fold:
                         oof[i] = sum((c * v for c, v in zip(coef, x[i])), Fraction(0))
@@ -326,7 +374,7 @@ def fit_and_select_grouped(spec, topo, train: dict, groups: dict) -> dict:
                         "coefficients_eV": [float(c) for c in coef], "training_rmse_eV": rmse(train_res),
                         "cv_rmse_eV": cv_rmse, "cv_max_abs_error_eV": max(float(abs(r)) for r in residuals),
                         "low_energy_recall": recall, "cv_spearman": spearman([float(v) for v in y], [float(v) for v in oof]),
-                        "passes": passes})
+                        "fold_coefficients_exact": fold_coefs, "passes": passes})
     passing = [r for r in results if r["passes"]]
     common = dict(topology_id=topo.topology_id, training_snapshot_id=train["artifact_id"],
                   label_fidelity=train["fidelity"], normalization=train["normalization"], n_training=len(entries),
@@ -364,8 +412,9 @@ def hamiltonian_from_grouped_selection(spec, topo, selection: dict) -> dict:
                     "low_energy_recall": chosen["low_energy_recall"]},
         uncertainty={"kind": "grouped_cv_residual_rmse", "value_eV": chosen["cv_rmse_eV"],
                      "note": "cross-validation residual scale; not a calibrated or certified error bound (T03.3)"},
-        validity_domain={"topology_id": topo.topology_id, "n_sites": spec.n_sites, "composition": spec.composition_counts,
-                         "fidelity": selection["label_fidelity"], "supercell": "working cell only (no transfer test, T01.5)"},
+        validity_domain={"topology_id": topo.topology_id, "n_sites": topo.n_sites, "composition": composition_of(spec, topo),
+                         "fidelity": selection["label_fidelity"], "supercell": list(topo.supercell),
+                         "transferable_features": all(is_transferable(n) for n in names)},
     )
 
 

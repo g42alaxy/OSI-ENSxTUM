@@ -12,6 +12,7 @@ from math import lcm
 
 from .configuration_model import feature_polynomial, predict
 from .contract import PipelineError, StageStatus, make_record
+from .structures import n_ones_of
 
 QUADRATIZATION_REQUIRED = "UNSUPPORTED_HIGHER_ORDER_WITHOUT_QUADRATIZATION"
 
@@ -62,9 +63,9 @@ def compile_encoding(spec, topo, hamiltonian: dict, target: str) -> dict:
     weight = Fraction(repr(spec.config["qubo"]["ratio_penalty_eV"]))
     #TODO: Task 03 — one-hot / domain-wall encodings for multicomponent slots and an auditable penalty bound for
     #TODO: instances too large for exhaustive certification.
-    penalty = penalty_polynomial(spec.n_sites, spec.n_B, weight)
+    n, k = topo.n_sites, n_ones_of(spec, topo)
+    penalty = penalty_polynomial(n, k, weight)
     objective = poly_add(physical, penalty)
-    n = spec.n_sites
     linear = [objective.get((i,), Fraction(0)) for i in range(n)]
     quadratic = [{"i": k[0], "j": k[1], "value": float(v), "exact": str(v)}
                  for k, v in sorted(objective.items()) if len(k) == 2]
@@ -74,7 +75,7 @@ def compile_encoding(spec, topo, hamiltonian: dict, target: str) -> dict:
     return make_record(
         "EncodingArtifact", spec.provenance, target=target, format="upper_triangle_once",
         topology_id=topo.topology_id, physical_hamiltonian_id=hamiltonian["artifact_id"],
-        objective="physical_cell_energy + lambda*(sum(bits)-%d)^2" % spec.n_B,
+        objective="physical_energy + lambda*(sum(bits)-%d)^2" % k,
         constant_eV=float(const), constant_exact=str(const),
         linear_eV=[float(v) for v in linear], linear_exact=[str(v) for v in linear],
         quadratic_eV=quadratic, higher_order_terms=higher, max_degree=degree(objective),
@@ -82,7 +83,7 @@ def compile_encoding(spec, topo, hamiltonian: dict, target: str) -> dict:
         physical_offset_eV=float(physical.get((), 0)), physical_offset_exact=str(physical.get((), 0)),
         bit_order="bits[i] is site i; string leftmost character is site 0",
         variable_to_slot={str(i): i for i in range(n)}, ancillas=[],
-        decode_rule="bit 1 -> species with encoding 1; reject if sum(bits) != %d" % spec.n_B,
+        decode_rule="bit 1 -> species with encoding 1; reject if sum(bits) != %d" % k,
     )
 
 
@@ -110,9 +111,9 @@ def verify_encoding(spec, topo, hamiltonian: dict, encoding: dict) -> dict:
     """Energy identity on all 2^n strings, including infeasible ones; penalised minimum must be feasible."""
     evaluate = _IntPoly(encoding)
     weight = Fraction(encoding["penalty_exact"])
-    k = spec.n_B
+    k = n_ones_of(spec, topo)
     max_dev, best, argmins = Fraction(0), None, []
-    for bits in product((0, 1), repeat=spec.n_sites):
+    for bits in product((0, 1), repeat=topo.n_sites):
         direct = predict(hamiltonian, topo, bits) + weight * (sum(bits) - k) ** 2
         value = evaluate(bits)
         max_dev = max(max_dev, abs(value - direct))
@@ -125,7 +126,7 @@ def verify_encoding(spec, topo, hamiltonian: dict, encoding: dict) -> dict:
     return make_record(
         "EncodingVerification", spec.provenance, encoding_id=encoding["artifact_id"], topology_id=topo.topology_id,
         status=StageStatus.COMPLETED.value if ok else StageStatus.FAILED.value,
-        n_states_checked=2 ** spec.n_sites, max_abs_deviation_exact=str(max_dev),
+        n_states_checked=2 ** topo.n_sites, max_abs_deviation_exact=str(max_dev),
         penalized_minimum_eV=float(best), penalized_minimum_exact=str(best),
         n_penalized_argmins=len(argmins), all_penalized_argmins_feasible=feasible_argmin,
         penalty_certification="exhaustive small-instance check; not a general sufficiency bound",

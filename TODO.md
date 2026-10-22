@@ -1,6 +1,12 @@
 # TODO — unimplemented parts of `mofpipe`
 
-This file explains every `#TODO` marker in `src/mofpipe/`. The pipeline runs end-to-end on the synthetic graph fixture (`mof_no_agent_fixture/`, Milestone A) and, since Milestone B, on physical projects: CIF input → slot lattice → built frameworks → periodic DFT labels → grouped-validated model → DFT-ranked candidates. Milestone B is verified only on a SYNTHETIC toy framework with a mock `pw.x` (`tests/toy_framework.py`, `tests/mock_pw.py`). Real MOF-5 runs still need the inputs listed under **Needs**.
+This file explains every `#TODO` marker in `src/mofpipe/`. The pipeline runs end to end on two kinds of input:
+- the synthetic graph fixture (`mof_no_agent_fixture/`, Milestone A);
+- physical projects: CIF input → slot lattices → built frameworks → periodic DFT labels → grouped-validated models → DFT-ranked candidates.
+  - Milestone B covers a single topology.
+  - Milestone C adds several topologies, transferable cluster features, supercell transfer checks, acquisition and refinement, relaxed-geometry dedup, references, validation and the report.
+
+Periodic DFT runs through PySCF (GPW, CPU/GPU) or a Quantum ESPRESSO adapter. Physical results so far come from SYNTHETIC toys (`tests/toy_framework.py` with a mock `pw.x`; `tests/pyscf_toy.py` with real PySCF). Real MOF-5 runs still need the inputs listed under **Needs**.
 
 - Find all markers: `grep -rn '#TODO' src/mofpipe`. Line numbers below are as of this commit; the function names are the stable anchors.
 - Task numbers refer to `instructions/NN_*.md`. Each item's "Done when" criteria come from that brief's *Acceptance* section.
@@ -20,36 +26,37 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 
 | ID | Task | What | Marker | Status |
 |---|---|---|---|---|
-| T01.1 | 01 | Full ProjectSpec and physical-case loader | — | **Done (B)** |
+| T01.1 | 01 | Full ProjectSpec and physical-case loader | — | **Done (B, C: several topologies)** |
 | T01.2 | 01 | CIF / periodic-net input mode | — | **Done (B)** |
-| T01.3 | 01 | Atomic framework construction | [framework.py:569](src/mofpipe/framework.py#L569) | **Done (B)**; PORMAKE wiring open |
-| T01.4 | 01 | Linker orientation states | [structures.py:54](src/mofpipe/structures.py#L54) | open |
-| T01.5 | 01/05 | Supercells and periodic translations | [structures.py:67](src/mofpipe/structures.py#L67) | partly (translations in CIF mode) |
-| T02.1 | 02 | Seed decoration generation | [structures.py:136](src/mofpipe/structures.py#L136) | open |
-| T02.2 | 02 | ML-potential relaxation | [structures.py:137](src/mofpipe/structures.py#L137) | open |
-| T02.3 | 02 | ML calibration against DFT and screening decisions | [structures.py:139](src/mofpipe/structures.py#L139) | open |
-| T03.1 | 03 | Cluster-feature generation from the slot lattice | [configuration_model.py:15](src/mofpipe/configuration_model.py#L15) | partly (site orbits, pair multiplicity) |
-| T03.2 | 03 | Model validation for real (noisy) data | — | **Done (B)** |
-| T03.3 | 03 | Uncertainty calibration and multifidelity models | [configuration_model.py:278](src/mofpipe/configuration_model.py#L278) | open |
-| T03.4 | 03 | Quadratization of higher-order models | [encoding.py:56](src/mofpipe/encoding.py#L56) | open |
-| T03.5 | 03/04 | Multicomponent encodings and penalty bounds | [encoding.py:63](src/mofpipe/encoding.py#L63), [intake.py:281](src/mofpipe/intake.py#L281) | open |
+| T01.3 | 01 | Atomic framework construction | [framework.py:571](src/mofpipe/framework.py#L571) | **Done (B)**; PORMAKE wiring open |
+| T01.4 | 01 | Linker orientation states | [structures.py:67](src/mofpipe/structures.py#L67) | open |
+| T01.5 | 01/05 | Supercells and periodic translations | [structures.py:81](src/mofpipe/structures.py#L81) | **Done (C)** for diagonal supercells; non-diagonal open |
+| T02.1 | 02 | Seed decoration generation | [structures.py:149](src/mofpipe/structures.py#L149) | open |
+| T02.2 | 02 | ML-potential relaxation | [structures.py:150](src/mofpipe/structures.py#L150) | open |
+| T02.3 | 02 | ML calibration against DFT and screening decisions | [structures.py:152](src/mofpipe/structures.py#L152) | open |
+| T03.1 | 03 | Cluster-feature generation from the slot lattice | [configuration_model.py:17](src/mofpipe/configuration_model.py#L17) | **Done (C)** for point/pair orbits; triplets, orientation open |
+| T03.2 | 03 | Model validation for real (noisy) data | — | **Done (B)**; transfer metric added (C) |
+| T03.3 | 03 | Uncertainty calibration and multifidelity models | [configuration_model.py:325](src/mofpipe/configuration_model.py#L325) | open |
+| T03.4 | 03 | Quadratization of higher-order models | [encoding.py:57](src/mofpipe/encoding.py#L57) | open |
+| T03.5 | 03/04 | Multicomponent encodings and penalty bounds | [encoding.py:64](src/mofpipe/encoding.py#L64), [intake.py:289](src/mofpipe/intake.py#L289) | open |
 | T04.1 | 04 | Exact MILP / constraint solver for large cells | [optimization.py:22](src/mofpipe/optimization.py#L22) | open |
-| T04.2 | 04 | QAOA simulation | [optimization.py:86](src/mofpipe/optimization.py#L86), [intake.py:323](src/mofpipe/intake.py#L323) | open |
+| T04.2 | 04 | QAOA simulation | [optimization.py:86](src/mofpipe/optimization.py#L86), [intake.py:331](src/mofpipe/intake.py#L331) | open |
 | T04.3 | 04 | QPU hardware adapter | [optimization.py:89](src/mofpipe/optimization.py#L89) | open |
-| T05.1 | 05 | Geometry-level deduplication | [candidates.py:18](src/mofpipe/candidates.py#L18) | open |
-| T05.2 | 05 | Evaluation-batch acquisition policy | [candidates.py:45](src/mofpipe/candidates.py#L45) | open |
-| T06.1 | 06 | Periodic DFT backend | [dft.py:103](src/mofpipe/dft.py#L103), [dft.py:200](src/mofpipe/dft.py#L200) | **Done (B)**; licensed codes, k-point study open |
-| T06.2 | 01/06/07 | Real evaluation path in the orchestrator | [orchestrator.py:349](src/mofpipe/orchestrator.py#L349) | **Done (B)**; embedding hook open (T07.3) |
+| T05.1 | 05 | Geometry-level deduplication | [candidates.py:19](src/mofpipe/candidates.py#L19) | **Done (C)**; non-diagonal canonicalisation open |
+| T05.2 | 05 | Evaluation-batch acquisition policy | [candidates.py:46](src/mofpipe/candidates.py#L46) | **Done (C)** for training acquisition; finalist-pool budget open |
+| T06.1 | 06 | Periodic DFT backend | [dft.py:75](src/mofpipe/dft.py#L75), [dft.py:229](src/mofpipe/dft.py#L229), [dft.py:429](src/mofpipe/dft.py#L429) | **Done (B, C: PySCF GPW engine, CPU/GPU)**; DFT+U/hybrids in PySCF, k-point study, HPC open |
+| T06.2 | 01/06/07 | Real evaluation path in the orchestrator | [orchestrator.py:543](src/mofpipe/orchestrator.py#L543) | **Done (B)**; embedding hook open (T07.3) |
+| T06.3 | 06 | GPU path validation | [dft.py:229](src/mofpipe/dft.py#L229) | written against gpu4pyscf 1.8, **not exercised** (no CUDA device) |
 | T07.1 | 07 | Embedding scheme and active-space export | [electronic.py:21](src/mofpipe/electronic.py#L21), [electronic.py:137](src/mofpipe/electronic.py#L137) | open |
 | T07.2 | 07 | Electronic solvers: CASCI/FCI, VQE, SQD | [electronic.py:138](src/mofpipe/electronic.py#L138), [electronic.py:139](src/mofpipe/electronic.py#L139) | open |
-| T07.3 | 07 | Corrected-energy assembly | [electronic.py:21](src/mofpipe/electronic.py#L21), [intake.py:343](src/mofpipe/intake.py#L343) | open |
-| T08.1 | 08 | Active-learning acquisition policy | [refinement.py:19](src/mofpipe/refinement.py#L19) | open |
-| T08.2 | 08 | Stopping criteria | [refinement.py:88](src/mofpipe/refinement.py#L88) | open |
-| T09.1 | 09 | Structural validation tool wrappers | [ranking.py:83](src/mofpipe/ranking.py#L83) | partly (builder sanity, slot mapping, force/stress) |
-| T09.2 | 09 | Reference-phase competition | [ranking.py:75](src/mofpipe/ranking.py#L75) | open |
-| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:101](src/mofpipe/report.py#L101), [intake.py:351](src/mofpipe/intake.py#L351) | open |
-| T10.1 | 10 | AiiDA workflow engine and concurrency | [orchestrator.py:17](src/mofpipe/orchestrator.py#L17), [dft.py:200](src/mofpipe/dft.py#L200) | open |
-| T10.2 | 10 | Runtime agent layer | [gateway.py:52](src/mofpipe/gateway.py#L52), [intake.py:265](src/mofpipe/intake.py#L265) | open |
+| T07.3 | 07 | Corrected-energy assembly | [electronic.py:21](src/mofpipe/electronic.py#L21), [intake.py:351](src/mofpipe/intake.py#L351) | open |
+| T08.1 | 08 | Active-learning acquisition policy | [refinement.py:21](src/mofpipe/refinement.py#L21) | **Done (C)** for physical projects |
+| T08.2 | 08 | Stopping criteria | [refinement.py:90](src/mofpipe/refinement.py#L90) | **Done (C)**; solver-gap accounting, model-family expansion open |
+| T09.1 | 09 | Structural validation tool wrappers | [ranking.py:83](src/mofpipe/ranking.py#L83) | **Done (C)**: in-house checks + optional MOFChecker/Zeo++; CrystalNets, phonons, PXRD open |
+| T09.2 | 09 | Reference-phase competition | — | **Done (C)** for pure-endpoint references |
+| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:145](src/mofpipe/report.py#L145), [intake.py:359](src/mofpipe/intake.py#L359) | open |
+| T10.1 | 10 | AiiDA workflow engine and concurrency | [orchestrator.py:18](src/mofpipe/orchestrator.py#L18), [dft.py:429](src/mofpipe/dft.py#L429) | open |
+| T10.2 | 10 | Runtime agent layer | [gateway.py:52](src/mofpipe/gateway.py#L52), [intake.py:273](src/mofpipe/intake.py#L273) | open |
 
 ---
 
@@ -64,7 +71,10 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - `physical_case/recipe.json` is adapted into the same schema (`spec_from_recipe`), so it loads as a separate PHYSICAL project and blocks on exactly the inputs it lacks (parent CIF, 3D linker geometry/substitution rule, protocols, tolerances, budgets).
   - Physical projects declare their split policy explicitly (`protocols.model_selection`: `label_orbits_per_topology`, `holdout_fraction`, `n_folds`, `seed`). The checksummed fixture `project.json` keeps `DEFAULT_SPLIT_MANIFEST`.
   - A run directory records its `project_type` and `provenance`; reusing it for the other kind raises `RUN_DIR_PROJECT_TYPE_MISMATCH`. Comparison groups embed the DFT protocol hash, so physical and synthetic labels never pool (`INCOMPATIBLE_FIDELITY`).
-- **Still open:** multiple topologies and transfer cells (Milestone C) are rejected at load time.
+- **Milestone C:**
+  - Several `candidate_topology_ids` are accepted, each with its own `source_structures` entry; the IDs must match (`TOPOLOGY_SOURCE_MISMATCH`).
+  - Per-source `supercell_matrices` override `search.supercell_matrices`. The first matrix is the working cell, any further ones are transfer cells.
+  - New protocol fields are validated at intake: `protocols.stopping`, the acquisition policy, `protocols.validation.{reference_phases, reference_set_complete, geometry_equivalence_tolerance_A, supercell_transfer}`.
 - **Needs:** A team decision on the real project's structures, tolerances and budgets.
 
 ### T01.2 CIF / periodic-net input mode — done (Milestone B)
@@ -101,14 +111,14 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Fix a deterministic initial orientation convention for reproducibility.
 - **Done when:** Orientation-distinct arrangements are not merged. Symmetry-equivalent ones get identical features.
 
-### T01.5 Supercells and periodic translations
-- **Where:** `structures.define_decoration_space`; also `candidates.deduplicate_candidates`
-- **Now:** One working cell per topology. Fixture graphs have an explicit point-group-like permutation list. CIF-derived slot lattices use one diagonal `search.supercell_matrices` entry, and their permutations already combine the space-group operations with the supercell translations. A second matrix is rejected (`UNSUPPORTED_SUPERCELL_MATRIX`). Exact enumeration limits a cell to 20 slots.
-- **To do:**
-  - Enumerate the decoration space for each matrix in `search.supercell_matrices`, including non-diagonal ones.
-  - Add lattice translations to the symmetry operations.
-  - Keep a second cell for transfer tests, and verify integral counts per cell.
-- **Done when:** Periodic replication tests pass: a replicated configuration has the same normalized energy, and its orbit maps consistently.
+### T01.5 Supercells and periodic translations — done for diagonal supercells (Milestone C)
+- **Where:** `project_spec._load_source` (working and transfer cells), `transfer.py`, `orchestrator._physical_supercell_checks`.
+- **Implemented:**
+  - Every further diagonal matrix is a transfer cell with its own TopologySpec (`<topology>@AxBxC`), slot permutations (space group × translations), integral counts per cell and formula units.
+  - The structures stage checks exactly that every working-cell orbit, replicated, has identical per-formula-unit features and maps to one transfer orbit.
+  - The `supercell_checks` stage compares DFT on replicated labels (same normalised energy within tolerance) and on seeded native transfer-cell orderings (model prediction error), giving a `SupercellTransferReport`.
+- **To do:** non-diagonal supercell matrices (the builder and the cluster enumeration assume diagonal cells).
+- **Done when (remaining):** the same replication tests pass for a non-diagonal transfer cell.
 
 ## Task 02 — Topology prescreen and ML potentials
 
@@ -141,18 +151,17 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 
 ## Task 03 — Configurational Hamiltonians and encodings
 
-### T03.1 Cluster-feature generation
-- **Where:** `configuration_model.FEATURE_DEGREE` (the fixed feature library)
-- **Now:**
-  - Four fixed features from the fixture: `constant`, `unlike_distance_1`, `unlike_distance_2`, `BBB_paths`.
-  - Milestone B added `site_orbit_k` point features, generated from the slot orbits of the topology's symmetry permutations. They are needed when the slot graph is not regular, e.g. a tetragonal supercell of a cubic net. Model candidates request them with `"site_orbits"`.
-  - Milestone B also added periodic contact multiplicity on distance-1 pairs (`TopologySpec.pair_weights_d1`).
+### T03.1 Cluster-feature generation — done for point and pair orbits (Milestone C)
+- **Where:** `clusters.py`; tokens are expanded per topology in `configuration_model.model_features`.
+- **Implemented:**
+  - Point orbits are parent-lattice slot sites under the space group. Pair orbits are pairs of slot sites within a centroid-distance cutoff, classified by rotation, fractional translation and lattice translation, so physically inequivalent pairs at equal distance stay separate.
+  - Values are counts per formula unit with every periodic image, which makes them identical between supercells.
+  - The polynomial form feeds `encoding.physical_polynomial` unchanged.
+  - Candidate tokens: `point_orbits`, `pairs<=R`. The fixed fixture features remain available, but they are not transferable.
 - **To do:**
-  - Generate symmetry orbits of pair and selected triplet clusters from the slot lattice and symmetry operations, including periodic images and orientation variables.
-  - Tie equivalent interactions while keeping physically inequivalent slots separate.
-  - Generate feature polynomials automatically. `encoding.physical_polynomial` already accepts any feature polynomial.
-  - icet may supply orbit machinery, but only after a tested slot-lattice mapping.
-- **Done when:** Symmetry-related arrangements get identical features (extend `test_feature_symmetry_and_swap_reachability`), and periodic multiplicity and replication tests pass.
+  - Triplet cluster orbits (the only higher-order feature is still the fixture's `BBB_paths`).
+  - Orientation variables (T01.4).
+  - Graph-distance (node-mediated) shells as an alternative to centroid distance.
 
 ### T03.2 Model validation for real data — done (Milestone B)
 - **Where:** `configuration_model.fit_and_select_grouped`, `evaluate_holdout`, `datasets.freeze_physical_split`.
@@ -221,32 +230,30 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 
 ## Task 05 — Deduplication and acquisition
 
-### T05.1 Geometry-level deduplication
-- **Where:** `candidates.deduplicate_candidates`
-- **Now:** Deduplicates discrete occupations by symmetry orbit (lexicographically smallest image, no A/B exchange).
-- **To do:**
-  - Add relaxed-geometry equivalence as a separate step. Never merge distinct nets, conformers or magnetic states just because their energies match.
-  - Add periodic-translation canonicalization (T01.5).
-  - Keep the unsymmetrized mapping for construction.
-- **Done when:** Known symmetry copies collapse and deliberately inequivalent arrangements stay separate.
+### T05.1 Geometry-level deduplication — done (Milestone C)
+- **Where:** `geometry_match.py`; used in `orchestrator._geometry_classes`.
+- **Implemented:** relaxed structures are equivalent when all of these hold:
+  - same inventory and magnetic state;
+  - lattices within 1 %;
+  - one parent space-group operation combined with a supercell translation maps every atom onto a same-element atom within `protocols.validation.geometry_equivalence_tolerance_A`.
 
-### T05.2 Evaluation-batch acquisition policy
-- **Where:** `candidates.select_pool`
-- **Now:** Takes the top k orbits per topology by surrogate base energy, keeping all ties at the cutoff, with a machine-readable `selection_reason`.
+  A bond-count fingerprint pre-filters candidates. Energies are never used. The classes define the CV groups and are reported for the evaluated pool. Without a declared tolerance, only identical relaxed geometries are grouped (the Milestone B rule).
+- **To do:** canonicalisation under non-diagonal supercell translations (T01.5).
+
+### T05.2 Evaluation-batch acquisition policy — done for training acquisition (Milestone C)
+- **Where:** `acquisition.select_evaluation_batch`; called by the physical refinement stage.
+- **Implemented:**
+  - A declared policy combines low predicted energy, committee spread of the grouped-CV fold models (exploration only, not a bound) and feature-space diversity, with a seeded audit share from the deprioritised half.
+  - Every topology gets a minimum quota. The rest goes by need (CV error, failing model, few labels), so an uncertain, under-sampled topology receives candidates.
+  - Only unlabelled, never-attempted orbits outside the frozen holdout are eligible, so nothing is submitted twice.
+  - Each pick records its reason, score components and the model and selection report it used.
 - **To do:**
-  - Implement `select_evaluation_batch` with a declared mix of low predicted energy, uncertainty and feature diversity.
-  - Allocate coverage across surviving topologies, plus a controlled audit fraction of deprioritized regions.
-  - Respect an evaluation budget, and label each candidate with the model version used at selection.
-  - Skip individual candidates that are already pending or successful. Today the job cache only deduplicates identical whole batches.
-  - Include larger-supercell candidates to test ordering-period dependence.
-- **Done when:**
-  - An uncertain, under-sampled topology receives candidates.
-  - Selection is reproducible from a seed.
-  - Held-out labels are never used to select training candidates.
+  - The finalist pool (`candidates.select_pool`) is still the surrogate top-k plus ties, with no evaluation budget across topologies.
+  - Larger-supercell candidates enter only through the transfer check, not through acquisition.
 
 ## Task 06 — Periodic DFT
 
-### T06.1 Periodic DFT backend — done (Milestone B); licensed codes, k-points and HPC open
+### T06.1 Periodic DFT backend — done (B; C adds the PySCF GPW engine); licensed codes, k-points and HPC open
 - **Where:** `dft.py` (`PeriodicDFTBackend`, `QuantumEspressoAdapter`, `evaluate_geometry`, `difference_convergence_study`).
 - **Implemented:**
   - Same `submit → job_status → collect` interface as the synthetic backend. The idempotency key is the protocol hash plus geometry hash, calculation, magnetic state and overrides, so a restart reuses successful jobs.
@@ -257,12 +264,30 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Normalisation is to the formula-unit count verified from the relaxed inventory. The fidelity is `DFT:<protocol_id>:<hash>`; the comparison group is formula unit + fidelity.
   - Retries follow `numerical_retries` and may only change `mixing_beta`, `mixing_mode` and `electron_maxstep` (`PROTOCOL_RETRY_CHANGES_SCIENCE` otherwise). Each attempt is recorded in `recovery_history`.
   - Budgets: `max_dft_jobs` and `max_cpu_core_hours` are checked before every submission (`BUDGET_EXHAUSTED` → stage `BLOCKED`). A missing executable gives `BACKEND_UNAVAILABLE` → `BLOCKED`.
+- **Milestone C: PySCF engine** (`dft.PySCFAdapter`, `pyscf_worker.py`):
+  - **Method.** Gaussian and plane waves with GTH basis sets and pseudopotentials, which may be mixed per element. `multigrid` (Gamma-point GPW) or `fftdf` (any k-mesh); DFT-D3/D4 from pyscf-dispersion; ASE relaxations; smearing conventions (`internal_energy`, `free_energy`, `zero_temperature_extrapolated`); CPU or GPU (gpu4pyscf).
+  - **Fidelity.** The engine identity (versions plus basis and pseudopotential data hashes) is part of the protocol hash.
+  - **Guards.** A stress from the FFTDF integrator is refused when it disagrees with the multigrid energy. Multigrid with k-points, DFT+U, hybrids and meta-GGAs are refused before any job.
+  - **Verification.** Finite-difference checks of forces and stress, and k-point folding against a replicated cell.
+- **Milestone C: result-check fixes** (from the Milestone B review):
+  - Force and stress gates apply only to what the protocol relaxed; `relaxation.calculation: "scf"` declares rigid geometries.
+  - The stress check uses the full tensor.
+  - QE's `forc_conv_thr` is set consistent with the norm check.
+  - A `vc-relax` output without a cell block is a parse error.
 - **To do:**
   - Adapters for licensed codes behind the same interface.
-  - k-point convergence of energy differences (only the cutoff is studied).
-  - Zero-smearing extrapolation conventions (only `total_energy_as_printed` is accepted).
+  - k-point convergence of energy differences, and Gaussian-basis convergence for PySCF (only the plane-wave cutoff is studied).
+  - In PySCF: DFT+U (k-point DFT+U exists without periodic stress or multigrid gradients), hybrid functionals (no periodic stress), user-supplied basis and pseudopotential files, per-site (antiferromagnetic) initial moments.
   - Remote/HPC submission through AiiDA CalcJobs (T10.1). Jobs currently run locally and synchronously.
-- **Needs:** The DFT protocol, magnetic-state policy, pseudopotentials, HPC resources and budgets.
+- **Needs:** The DFT protocol, magnetic-state policy, pseudopotentials or basis sets, HPC resources and budgets.
+
+### T06.3 GPU path validation
+- **Where:** `pyscf_worker._scf_object` and `Evaluator` (`device: gpu`).
+- **Now:**
+  - Written against the gpu4pyscf 1.8.1 API: `to_gpu`, `multigrid_numint`, `Gradients().get_stress()` and GPU smearing.
+  - The probe refuses `device: gpu` with `BACKEND_UNAVAILABLE` when gpu4pyscf/cupy or a CUDA device is missing.
+  - It has never been run, because this machine has no CUDA device.
+- **To do:** Run `tests/test_pyscf_backend.py` with `device="gpu"` on a CUDA host. Compare energies, forces and stress with the CPU path to about 1e-6 Ha.
 
 ### T06.2 Real evaluation path in the orchestrator — done (Milestone B)
 - **Where:** `Pipeline._physical_labels`, `_physical_evaluation`, `_physical_ranking`, `_physical_validation` (selected automatically for physical projects).
@@ -308,61 +333,50 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
 
 ## Task 08 — Adaptive refinement
 
-### T08.1 Active-learning acquisition policy
-- **Where:** `refinement.plan_next_batch`
-- **Now:** Picks configurations by feature-space novelty (L1 distance to labelled feature vectors), restricted to training-split orbits. It never picks development or holdout orbits.
+### T08.1 Active-learning acquisition policy — done for physical projects (Milestone C)
+- **Where:** `orchestrator._physical_refinement`, `acquisition.py`.
+- **Implemented:** rounds of the declared acquisition policy (T05.2) with DFT labels, never from the holdout. Construction or DFT failures and transformations are recorded and never become labels. The CV groups are updated from relaxed-geometry equivalence.
+- **Now (fixture):** feature-space novelty, as before.
 - **To do:**
-  - Use the registered energy/uncertainty/diversity policy, shared with T05.2.
-  - Explore outside the current model's preferred basin.
-  - Revisit uncertain topology exclusions (T02.3) and untested supercell patterns (T01.5).
-- **Done when:** On a controlled enumerable fixture, a deliberately biased initial training set recovers a missed basin.
+  - Revisit uncertain topology exclusions once a screening policy exists (T02.3).
+  - A controlled enumerable fixture with a deliberately biased initial set that recovers a missed basin (the brief's acceptance test) still has to be built.
 
-### T08.2 Stopping criteria
-- **Where:** `refinement.run_active_learning`
-- **Now:**
-  - `CONVERGED_WITHIN_SCOPE` when every topology selects a model passing the development threshold in one round.
+### T08.2 Stopping criteria — done for physical projects (Milestone C)
+- **Where:** `refinement.assess_refinement`, `refinement.leading_sets`.
+- **Implemented:**
+  - `CONVERGED_WITHIN_SCOPE` when every topology passes grouped CV and the leading set is unchanged for `tolerances.consecutive_stable_rounds` rounds. The leading set is the orbits within tolerance of the k-th lowest prediction, per topology and pooled, so reordering inside the tolerance band does not count as instability.
   - `MODEL_INADEQUATE` when every candidate is well determined but fails.
-  - `BUDGET_EXHAUSTED` at the iteration cap (at most 3).
-  - `INCONCLUSIVE` when nothing is acquirable.
+  - `INCONCLUSIVE` when a topology needs labels and none are left.
+  - `BUDGET_EXHAUSTED` at `protocols.stopping.max_rounds` or the DFT budget, never reported as convergence.
+  - An interrupted refinement resumes from the job cache.
 - **To do:**
-  - Require stability over `tolerances.consecutive_stable_rounds`.
-  - Re-solve leading candidates every round and compare gaps using tolerance-aware equivalence classes.
-  - Add coverage criteria, and account for solver gaps and finite search coverage.
-  - Allow explicit model-family expansion when requested.
-  - Add a matched embedded-correction surrogate when justified.
-  - Keep a persistent event log, and resume mid-loop from the last completed iteration.
-- **Done when:**
-  - Near-degenerate candidates stay tied within tolerance.
-  - Interrupted iterations resume without repeating expensive work.
-  - Budget exhaustion is never reported as convergence (already tested).
+  - Account for solver gaps once a non-exhaustive solver exists (T04.1).
+  - Explicit model-family expansion on demand.
+  - A matched embedded-correction surrogate (T07).
+  - Coverage criteria beyond the leading set.
 
 ## Task 09 — Validation, competition and report
 
-### T09.1 Structural validation tool wrappers
-- **Where:** `ranking.validate_structures`
-- **Now:**
-  - Fixture runs report every check as `SKIPPED_NO_ATOMIC_GEOMETRY`.
-  - Physical runs already report builder sanity, post-relaxation slot mapping, and residual force/stress (from `framework.py` and `dft.py`).
-  - External tools are still skipped.
-- **To do:** Implement `validate_structure(geometry_id, validation_protocol_id)`, wrapping each tool with its version, parameters, parseable status and raw evidence:
-  - MOFChecker sanity checks
-  - CrystalNets / MOFid topology identity
-  - Zeo++ pore descriptors
-  - post-relaxation connectivity, and residual force/stress checks
-  - targeted phonon/elastic stability for finalists
-  - PXRD comparison, and NMR only with a validated protocol, against referenced measurements with stated instrumental tolerances
-
-  Tool success is not proof of synthesizability.
-- **Done when:** Simulated observations are labelled simulated, and every reported number traces to a stored artifact.
-
-### T09.2 Reference-phase competition
-- **Where:** `ranking.evaluate_reference_mixtures`
-- **Now:** Always `INCOMPLETE`: no reference set exists, so the result is a relative ranking, not a stability certificate.
+### T09.1 Structural validation tool wrappers — done for in-house checks + optional MOFChecker/Zeo++ (Milestone C)
+- **Where:** `validation.validate_structure`; run on every ranked finalist by `orchestrator._physical_validation`.
+- **Implemented:**
+  - Checks: post-relaxation slot/node mapping, residual force and stress (or `NOT_APPLICABLE` for rigid geometries), minimum interatomic distance, metal coordination numbers against the parent, cell distortion.
+  - MOFChecker (`mofchecker` package) and Zeo++ (`network` executable) run when installed, with their raw output; otherwise `SKIPPED_TOOL_UNAVAILABLE`. Neither is a dependency.
 - **To do:**
-  - Accept a reference set of phase-separated combinations at the same overall composition and compatible energy level.
-  - Solve the mixture balance explicitly.
-  - Report incomplete reference coverage instead of claiming absolute stability.
-- **Done when:** A missing reference gives an incomplete result, never a stability certificate.
+  - CrystalNets/MOFid net identity. This would also verify that candidate CIFs are distinct nets; `declared_net` is still unverified.
+  - Targeted phonon/elastic stability for finalists.
+  - PXRD comparison, and NMR only with a validated protocol.
+- **Done when (remaining):** simulated observations are labelled simulated, and every reported number traces to a stored artifact (already true for the implemented checks).
+
+### T09.2 Reference-phase competition — done for pure-endpoint references (Milestone C)
+- **Where:** `references.py`; `orchestrator._reference_phases`.
+- **Implemented:**
+  - `protocols.validation.reference_phases: "pure_endpoints"` evaluates every topology with one linker species on every slot, using the same DFT protocol and normalising per cell.
+  - The mixture balance (min Σcᵢ Eᵢ subject to the inventory constraint, c ≥ 0) is solved exactly over basic feasible solutions, and mixing energies are reported per finalist.
+  - The competition is `INCOMPLETE` unless `reference_set_complete: true` and every reference was evaluated.
+- **To do:**
+  - User-declared reference phases (other CIFs, e.g. dense polymorphs or linker/oxide phases), with their own formula units.
+  - Mixing energies for the whole enumerated space via the surrogate.
 
 ### T09.3 Benchmarks, ablations and literature review
 - **Where:** `report.build_report`; the literature check in `intake.validate_project`
@@ -412,7 +426,10 @@ These came out of the instruction-set review and must be settled in `instruction
   - ~~topology definitions themselves~~ — physical projects derive `TopologySpec` from `source_structures[i]` (CIF + `topology_id` + checksum + source); the template's `source_structures: []` needs this entry shape documented.
   - ~~holdout/split policy (T03.2)~~ — carried in `protocols.model_selection`; should be documented in the template.
   - project `provenance` (`SYNTHETIC` | `PHYSICAL`) — required by the loader, absent from the template.
-  - reference phase sets (T09.2)
+  - reference phase sets (T09.2): carried as `protocols.validation.reference_phases` / `reference_set_complete`; only `pure_endpoints` exists, and the template should document both.
+  - acquisition and stopping policies (T05.2, T08): `protocols.acquisition` (`batch_size`, `weights`, `audit_fraction`, `min_per_topology`, `seed`) and `protocols.stopping.max_rounds` should be documented in the template.
+  - transfer-test policy (T01.5): `protocols.validation.supercell_transfer` (`n_replicated`, `n_native`, `seed`) and per-source `supercell_matrices`.
+  - DFT engine fields: the PySCF engine needs `basis`, `pseudo`, `ke_cutoff_Ha`, `integral_scheme`, `device`, `precision`, `max_memory_MB`, `conv_tol_Ha`; QE needs `pseudo_dir`, `pseudopotentials`, `ecutwfc_Ry`, `ecutrho_Ry`, `conv_thr_Ry`. The template has a single `protocols.dft` slot.
   - seed sampling and screening policies (T02.1, T02.3)
   - ranking comparison policy (tie tolerance currently reuses `target_relative_energy_tolerance`)
   - electronic solver protocols for CASCI, VQE and SQD (T07.2)
@@ -430,9 +447,14 @@ Already resolved in code, and worth proposing back into `00_SHARED_CONTRACT.md`:
 
 ## Suggested order
 
-Following the milestones in `instructions/10_AGENT_ARCHITECTURE.md`. Milestone A, the synthetic end-to-end fixture, is done. Milestone B (T01.1, T01.2, T01.3, T06.1, T06.2, T03.2) is done in software and verified on the SYNTHETIC toy; running it on MOF-5 BDC/NH₂-BDC needs the verified CIF, a substitution rule or 3D blocks, a DFT protocol with pseudopotentials, and tolerances/budgets.
+Following the milestones in `instructions/10_AGENT_ARCHITECTURE.md`. Milestones A, B and C are done in software:
+- A: the synthetic end-to-end fixture;
+- B: T01.1–T01.3, T06.1, T06.2, T03.2;
+- C: T01.5, T03.1, T05.1, T05.2, T08.1, T08.2, T09.1 (in-house + optional tools), T09.2 (pure endpoints), plus the PySCF engine.
 
-1. **Milestone C:** T01.5, T03.1, T05.1, T05.2, T08.1, T08.2, T09.1, T09.2, plus T02.1–T02.3 if ML screening is used. Second topology, supercells, acquisition, refinement and the full report.
+They are verified on SYNTHETIC toys. Running MOF-5 BDC/NH₂-BDC needs: the verified CIF, a substitution rule or 3D blocks, a converged DFT protocol (basis/cutoff/k-points for PySCF), tolerances and budgets. T02.1–T02.3 (ML screening) were skipped: no ML potential was chosen.
+
+1. **Before real runs:** T06.3 (GPU validation on a CUDA host), Gaussian-basis and k-point convergence studies, non-diagonal supercells if the MOF-5 primitive/conventional relation needs them.
 2. **Milestone D:** T04.1, T04.2, T03.4, T03.5, then T07.1–T07.2 on a published benchmark.
 3. **Milestone E:** T07.3, embedding corrections fed back into ranking.
 4. **Milestone F:** T10.1, T10.2, T04.3, T09.3.

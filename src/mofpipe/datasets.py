@@ -11,7 +11,7 @@ from collections import Counter
 from fractions import Fraction
 
 from .contract import PipelineError, content_hash, exact, make_record
-from .structures import configuration_id, orbit_id, validate_occupation
+from .structures import configuration_id, n_ones_of, orbit_id, validate_occupation
 
 SUPPORTED_UNITS = ("eV",)
 PER_FORMULA_UNIT = "per_abstract_12_slot_formula_unit"
@@ -56,7 +56,7 @@ def ingest_labels(spec, rows: list, role: str, source: str) -> dict:
         topo = spec.topologies.get(row.get("topology_id"))
         if topo is None:
             raise PipelineError("UNKNOWN_TOPOLOGY", str(row.get("topology_id")))
-        bits = validate_occupation(row.get("bits"), spec.n_sites, spec.n_B)
+        bits = validate_occupation(row.get("bits"), topo.n_sites, n_ones_of(spec, topo))
         cid = configuration_id(topo, bits)
         if row.get("configuration_id") != cid:
             raise PipelineError("CONFIGURATION_ID_MISMATCH", str(row.get("configuration_id")))
@@ -134,6 +134,13 @@ def check_snapshot_against_split(snapshot: dict, split: dict, allowed_group: str
             raise PipelineError("HOLDOUT_LABEL_IN_LEARNER_DATA", e["configuration_id"])
         if e["orbit_id"] not in groups[allowed_group]:
             raise PipelineError("ORBIT_LEAKAGE", f"{e['configuration_id']} not in {allowed_group}")
+
+
+def check_no_holdout(snapshot: dict, split: dict) -> None:
+    """Acquired labels (refinement) may come from training or unlabelled orbits, never from the frozen holdout."""
+    for e in snapshot["entries"]:
+        if e["orbit_id"] in split["per_topology"][e["topology_id"]]["holdout"]:
+            raise PipelineError("HOLDOUT_LABEL_IN_LEARNER_DATA", e["configuration_id"])
 
 
 def freeze_physical_split(spec, spaces: dict) -> dict:

@@ -15,8 +15,8 @@ from .structures import canonical_bits
 
 def deduplicate_candidates(spec, topo, solver_result: dict) -> dict:
     """deduplicate_candidates(candidate_ids, symmetry_policy_id) -> CandidateSet."""
-    #TODO: Task 05 — relaxed-geometry equivalence (separate from decoration dedup) without merging distinct nets,
-    #TODO: conformers or magnetic states; periodic-translation canonicalisation for supercells.
+    # Relaxed-geometry equivalence (T05.1) is separate: geometry_match.py, applied to evaluated physical candidates.
+    #TODO: Task 05 — canonicalisation under non-diagonal supercell translations (only diagonal supercells exist).
     orbits = defaultdict(list)
     for bits, energy in table_from_result(solver_result):
         orbits[bit_string(canonical_bits(topo, bits))].append((bits, energy))
@@ -42,8 +42,8 @@ def deduplicate_candidates(spec, topo, solver_result: dict) -> dict:
 
 def select_pool(spec, candidate_set: dict) -> dict:
     """Best k unique orbits per graph, keeping every tie at the cutoff."""
-    #TODO: Task 05 — select_evaluation_batch: declared energy/uncertainty/diversity acquisition with topology
-    #TODO: coverage allocation, audit fraction for deprioritised regions and an evaluation budget.
+    # The finalist pool is the surrogate top-k (exploitation); training acquisition uses acquisition.py (T05.2).
+    #TODO: Task 05 — an evaluation budget across topologies for the finalist pool itself.
     k = spec.config["candidate_pool"]["top_k_unique_orbits_per_topology"]
     rows = candidate_set["candidates"]
     energies = [Fraction(r["predicted_base_energy_exact"]) for r in rows]

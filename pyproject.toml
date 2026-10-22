@@ -4,13 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mofpipe"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic MOF arrangement/topology ranking pipeline (no runtime agents)"
 requires-python = ">=3.10"
-dependencies = []
+# The pipeline core is standard-library Python. These packages run the periodic DFT engine
+# (protocols.dft.engine = "pyscf"): PySCF GPW, DFT-D3/D4 dispersion and ASE relaxations.
+dependencies = [
+    "pyscf>=2.14",
+    "pyscf-dispersion>=1.5",
+    "ase>=3.23",
+]
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+# protocols.dft.device = "gpu": pick the gpu4pyscf wheel matching the installed CUDA toolkit (cuda11x/cuda12x/...).
+gpu = ["gpu4pyscf-cuda12x>=1.8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -18,3 +26,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "pyscf: runs real PySCF calculations (minutes on a laptop CPU); deselect with -m 'not pyscf'",
+]

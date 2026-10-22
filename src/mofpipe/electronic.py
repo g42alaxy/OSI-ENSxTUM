@@ -13,7 +13,7 @@ import sys
 from fractions import Fraction
 
 from .contract import JobState, PipelineError, StageStatus, content_hash, exact, make_record
-from .structures import configuration_id, orbit_id, validate_occupation
+from .structures import configuration_id, n_ones_of, orbit_id, validate_occupation
 
 EVALUATOR_SCRIPT = "tools/mock_evaluator.py"
 
@@ -39,7 +39,7 @@ class SyntheticFixtureBackend:
             topo = self.spec.topologies.get(r["topology_id"])
             if topo is None:
                 raise PipelineError("UNKNOWN_TOPOLOGY", r["topology_id"])
-            validate_occupation(r["bits"], self.spec.n_sites, self.spec.n_B)
+            validate_occupation(r["bits"], topo.n_sites, n_ones_of(self.spec, topo))
         payload = {"backend": self.name, "script_sha256": self.script_sha256, "case": self.spec.case,
                    "correction_mode": self.spec.correction_mode,
                    "requests": [{"topology_id": r["topology_id"], "bits": list(r["bits"])} for r in requests]}

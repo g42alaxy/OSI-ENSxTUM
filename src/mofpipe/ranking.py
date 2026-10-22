@@ -72,18 +72,15 @@ def ranking_order_changed(base: dict, corrected: dict) -> bool:
 
 def evaluate_reference_mixtures(spec, ranking: dict) -> dict:
     """No phase-separated reference set is supplied, so no stability claim is possible."""
-    #TODO: Task 09 — phase-separated reference set at the same overall composition and energy level; solve the
-    #TODO: reference mixture balance explicitly and report incomplete coverage.
+    # Fixture projects have no reference phases; physical projects use references.evaluate_reference_mixtures.
     return make_record("CompetitionReport", spec.provenance, ranking_id=ranking["artifact_id"],
                        status=StageStatus.INCOMPLETE.value, reference_set=None,
                        reason="no reference phases supplied; result is a relative ranking, not a stability certificate")
 
 
 def validate_structures(spec) -> dict:
-    #TODO: Task 09 — validate_structure wrappers (version, parameters, raw evidence): MOFChecker sanity checks,
-    #TODO: CrystalNets/MOFid topology identity, Zeo++ pore descriptors, phonon/elastic stability for finalists,
-    #TODO: PXRD (and validated NMR) comparison with referenced measurements. Physical projects already check
-    #TODO: builder sanity, post-relaxation slot mapping and residual force/stress (framework.py, dft.py).
+    # Fixture projects have no atoms. Physical projects use validation.validate_structure (T09.1).
+    #TODO: Task 09 — CrystalNets/MOFid net identity, phonon/elastic stability for finalists, PXRD (and validated NMR).
     skipped = StageStatus.SKIPPED_NO_ATOMIC_GEOMETRY.value
     return {name: skipped for name in ("atomic_construction", "mofchecker", "crystalnets_topology", "zeopp_pores",
                                        "post_relaxation_connectivity", "phonon_elastic_stability", "pxrd_comparison",

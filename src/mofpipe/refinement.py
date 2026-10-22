@@ -8,6 +8,7 @@ exhaustion is never reported as convergence.
 from __future__ import annotations
 
 import random
+from fractions import Fraction
 
 from .configuration_model import feature_vector, fit_and_select
 from .contract import PipelineError, StopReason, make_record
@@ -16,8 +17,8 @@ from .datasets import check_snapshot_against_split, ingest_labels, merge_snapsho
 
 def plan_next_batch(spec, snapshot: dict, split: dict, batch_size: int, seed: int) -> list:
     """Diversity-driven acquisition in feature space, restricted to training-split orbits."""
-    #TODO: Task 08 — registered energy/uncertainty/diversity acquisition policy, exploration outside the preferred
-    #TODO: basin, revisiting uncertain topology exclusions and untested supercell patterns.
+    # Fixture active learning (feature-space novelty). Physical projects use acquisition.select_evaluation_batch.
+    #TODO: Task 08 — revisit uncertain topology exclusions once a screening policy exists (T02.3).
     labelled_orbits = {e["orbit_id"] for e in snapshot["entries"]}
     rng = random.Random(seed)
     batch = []
@@ -85,9 +86,9 @@ def run_active_learning(spec, store, backend, train: dict, dev: dict, split: dic
         diagnosis = {tid: _diagnose(sel) for tid, sel in selections.items()}
         entry = {"iteration": iteration, "training_snapshot_id": train["artifact_id"], "n_labels": train["n_labels"],
                  "selected": {t: s["selected_model"] for t, s in selections.items()}, "diagnosis": diagnosis}
-        #TODO: Task 08 — stopping on stability over tolerances.consecutive_stable_rounds, tolerance-aware ranking
-        #TODO: equivalence classes, coverage criteria and solver gaps; explicit model-family expansion on demand;
-        #TODO: matched embedded-correction surrogate when justified.
+        # Fixture stopping rule; physical projects use assess_refinement (stable rounds, leading sets).
+        #TODO: Task 08 — solver-gap accounting for non-exhaustive solvers, explicit model-family expansion on
+        #TODO: demand, matched embedded-correction surrogate when justified.
         if all(d == "PASS" for d in diagnosis.values()):
             stop = StopReason.CONVERGED_WITHIN_SCOPE
         elif any(d == "MODEL_FAMILY_INADEQUATE" for d in diagnosis.values()):
@@ -116,3 +117,70 @@ def run_active_learning(spec, store, backend, train: dict, dev: dict, split: dic
                          convergence_criterion="every topology selects a model with development RMSE <= threshold",
                          final_holdout_used=False)
     return report, train
+
+
+# -- physical projects: DFT active learning with declared stopping rules (T08.1, T08.2) ----------------------
+STOPPING_REQUIRED = ("max_rounds",)
+
+
+def stopping_errors(stopping: dict, tolerances: dict) -> list:
+    errors = [f"protocols.stopping.{k}" for k in STOPPING_REQUIRED if stopping.get(k) is None]
+    if type(stopping.get("max_rounds")) is not int or not 0 < stopping.get("max_rounds", 0) <= 20:
+        errors.append("protocols.stopping.max_rounds")
+    rounds = tolerances.get("consecutive_stable_rounds")
+    if type(rounds) is not int or rounds < 1:
+        errors.append("tolerances.consecutive_stable_rounds")
+    return sorted(set(errors))
+
+
+def leading_sets(spec, hamiltonians: dict, spaces: dict, k: int, tol: Fraction) -> dict:
+    """Orbits whose predicted energy is within tol of the k-th lowest one, per topology and pooled over topologies.
+
+    Tolerance-aware equivalence: reordering inside the tolerance band does not change the set.
+    """
+    from .acquisition import bits_of
+    from .configuration_model import predict
+
+    energies = {}
+    for tid, ham in hamiltonians.items():
+        topo = spec.topologies[tid]
+        for orbit in spaces[tid]["orbit_sizes"]:
+            energies[orbit] = predict(ham, topo, bits_of(orbit))
+
+    def lead(items: dict) -> list:
+        values = sorted(items.values())
+        if not values:
+            return []
+        cutoff = values[min(k, len(values)) - 1] + tol
+        return sorted(o for o, e in items.items() if e <= cutoff)
+
+    out = {tid: lead({o: e for o, e in energies.items() if o.split(":")[0] == tid}) for tid in hamiltonians}
+    out["pooled"] = lead(energies)
+    return out
+
+
+def assess_refinement(round_index: int, selections: dict, lead: dict | None, previous: dict | None,
+                      stable_rounds: int, required: int, max_rounds: int, acquirable: dict | None = None) -> tuple:
+    """assess_refinement(snapshot_id, stopping_policy_id) -> (StopReason | None, stable_rounds, diagnosis)."""
+    diagnosis = {}
+    for tid, sel in selections.items():
+        if sel["status"] == "COMPLETED":
+            diagnosis[tid] = "PASS"
+            continue
+        done = [c for c in sel["candidates"] if c["status"] == "COMPLETED"]
+        max_p = max((c.get("n_parameters", 0) for c in sel["candidates"]), default=0)
+        well_determined = len(done) == len(sel["candidates"]) and sel["n_training"] >= 3 * max(max_p, 1)
+        diagnosis[tid] = "MODEL_FAMILY_INADEQUATE" if well_determined else "NEEDS_LABELS"
+    if all(d == "PASS" for d in diagnosis.values()) and lead is not None:
+        stable_rounds = stable_rounds + 1 if previous is not None and previous == lead else 0
+        if stable_rounds >= required:
+            return StopReason.CONVERGED_WITHIN_SCOPE, stable_rounds, diagnosis
+    else:
+        stable_rounds = 0
+    if any(d == "MODEL_FAMILY_INADEQUATE" for d in diagnosis.values()):
+        return StopReason.MODEL_INADEQUATE, stable_rounds, diagnosis
+    if acquirable is not None and any(d == "NEEDS_LABELS" and not acquirable.get(t) for t, d in diagnosis.items()):
+        return StopReason.INCONCLUSIVE, stable_rounds, diagnosis  # more labels needed, none left to acquire
+    if round_index >= max_rounds:
+        return StopReason.BUDGET_EXHAUSTED, stable_rounds, diagnosis
+    return None, stable_rounds, diagnosis

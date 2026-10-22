@@ -40,6 +40,11 @@ class TopologySpec:
     atomic_coordinates: object
     provenance: str
     pair_weights_d1: tuple = ()  # periodic contact multiplicity per pairs_d1 entry; empty means 1 each
+    n_ones: int | None = None  # sites carrying encoding 1 in this cell; None = the project-wide count (fixture)
+    composition: tuple = ()  # (species, count) in this cell; empty = the project-wide composition (fixture)
+    clusters: tuple = ()  # parent-lattice cluster orbits counted in this cell (clusters.supercell_clusters)
+    supercell: tuple = ()  # diagonal supercell of the parent cell (CIF-derived lattices)
+    parent_topology_id: str | None = None  # transfer cells: the working-cell topology they test
 
     @classmethod
     def from_dict(cls, d: dict) -> "TopologySpec":
@@ -197,7 +202,9 @@ def topology_checks(spec: ProjectSpec, topo: TopologySpec) -> tuple[list, list]:
         if not ok:
             errors.append({"code": code, "check": name, "detail": detail})
 
-    tid, n, enc, counts = topo.topology_id, topo.n_sites, spec.species_encoding, spec.composition_counts
+    from .structures import composition_of
+
+    tid, n, enc, counts = topo.topology_id, topo.n_sites, spec.species_encoding, composition_of(spec, topo)
     if spec.project_type == FIXTURE_PROJECT_TYPE:
         check(f"{tid}:input_mode", topo.representation == GRAPH_MODE, "UNSUPPORTED_INPUT_MODE", topo.representation)
         check(f"{tid}:provenance", topo.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH")
@@ -206,7 +213,8 @@ def topology_checks(spec: ProjectSpec, topo: TopologySpec) -> tuple[list, list]:
     else:
         check(f"{tid}:input_mode", topo.representation == GRAPH_REPRESENTATION, "UNSUPPORTED_INPUT_MODE", topo.representation)
         check(f"{tid}:provenance", topo.provenance == spec.provenance, "PROVENANCE_MISMATCH")
-    check(f"{tid}:site_count", n == spec.n_sites and topo.site_ids == tuple(range(n)), "INVALID_SITE_COUNT")
+    site_count_ok = (n == spec.n_sites if spec.project_type == FIXTURE_PROJECT_TYPE else sum(counts.values()) == n)
+    check(f"{tid}:site_count", site_count_ok and topo.site_ids == tuple(range(n)), "INVALID_SITE_COUNT")
     check(f"{tid}:allowed_species", len(topo.allowed_species) == n and all(set(s) <= set(enc) for s in topo.allowed_species),
           "INVALID_ALLOWED_SPECIES")
     for species, count in counts.items():

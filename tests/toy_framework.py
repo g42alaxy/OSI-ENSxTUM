@@ -152,3 +152,51 @@ def write_toy_project(dst, overrides=None, cif_text=None, mutate=None) -> Path:
 
 if __name__ == "__main__":
     print(write_toy_project(sys.argv[1] if len(sys.argv) > 1 else "runs/toy_physical_project"))
+
+
+# -- Milestone C: two candidate structures, a transfer cell, cluster features, refinement, references --------------
+def staggered_cif():
+    """Polymorph of the toy net: the four C-H per C rotated by 45 degrees about the linker axis (SYNTHETIC)."""
+    atoms = [("Zn1", "Zn", 0.0, 0.0, 0.0, 1.0), ("O1", "O", 2.0 / A, 0.0, 0.0, 1.0), ("C1", "C", 3.3 / A, 0.0, 0.0, 1.0),
+             ("H1", "H", 3.3 / A, 0.764 / A, 0.764 / A, 1.0)]
+    lines = toy_cif().splitlines()
+    head = lines[:lines.index("_atom_site_occupancy") + 1]
+    return "\n".join(head + [f"{l} {e} {x:.6f} {y:.6f} {z:.6f} {o}" for l, e, x, y, z, o in atoms]) + "\n"
+
+
+def milestone_c_overrides(staggered_sha):
+    return {
+        "candidate_topology_ids": ["toy_pcu", "toy_pcu_staggered"],
+        "search": {"supercell_matrices": [[[2, 0, 0], [0, 2, 0], [0, 0, 1]], [[2, 0, 0], [0, 2, 0], [0, 0, 2]]]},
+        "protocols": {
+            "model_selection": {
+                "candidates": [{"id": "C0_first_shell", "features": ["constant", "pairs<=5.8"]},
+                               {"id": "C1_two_shells", "features": ["constant", "point_orbits", "pairs<=8.2"]}],
+                "label_orbits_per_topology": 12, "holdout_fraction": 0.25, "n_folds": 3, "seed": 11},
+            "acquisition": {"top_k_unique_orbits_per_topology": 3, "batch_size": 4, "audit_fraction": 0.25,
+                            "weights": {"energy": 1.0, "uncertainty": 1.0, "diversity": 0.5},
+                            "min_per_topology": 1, "seed": 7},
+            "stopping": {"max_rounds": 3},
+            "validation": {"structural_checks": ["builder_sanity", "post_relaxation_slot_mapping", "residual_force_stress"],
+                           "geometry_equivalence_tolerance_A": 0.1, "reference_phases": "pure_endpoints",
+                           "reference_set_complete": False,
+                           "supercell_transfer": {"n_replicated": 1, "n_native": 2, "seed": 3}}},
+        "tolerances": {"consecutive_stable_rounds": 1},
+    }
+
+
+def write_toy_milestone_c_project(dst, overrides=None, mutate=None) -> Path:
+    """Two SYNTHETIC candidate structures with the same formula unit: toy_pcu (2x2x1 working cell, 2x2x2 transfer
+    cell) and its staggered polymorph toy_pcu_staggered (2x2x1 working cell only)."""
+    dst = Path(dst)
+    (dst / "structures").mkdir(parents=True, exist_ok=True)
+    staggered = staggered_cif()
+    (dst / "structures/toy_pcu_staggered.cif").write_text(staggered)
+
+    def add_second(spec):
+        spec["source_structures"].append({"topology_id": "toy_pcu_staggered", "cif": "structures/toy_pcu_staggered.cif",
+                                          "sha256": sha(staggered), "source": "tests/toy_framework.py (generated, SYNTHETIC)",
+                                          "declared_net": "pcu", "supercell_matrices": [[[2, 0, 0], [0, 2, 0], [0, 0, 1]]]})
+        if mutate:
+            mutate(spec)
+    return write_toy_project(dst, _merge(milestone_c_overrides(sha(staggered)), overrides or {}), mutate=add_second)
