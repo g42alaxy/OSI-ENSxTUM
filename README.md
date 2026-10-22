@@ -12,9 +12,7 @@ MTV-MOFs carry two or more linkers on one framework, and their properties depend
 2. **Molecule encoding.** Each variable linker site $i$ becomes a binary variable, $x_i = 1$ if it holds linker B, so an arrangement is a bit string $\mathbf{x} \in \lbrace 0,1 \rbrace^N$ at fixed composition $\sum_i x_i = N_B$.
 3. **QUBO Hamiltonian.** Agent A2 chooses the model form (point and pair cluster features, encoding, QUBO or HUBO). Code fits the coefficients to estimated DFT energies with grouped cross-validation and compiles
     
-    $
-    H(\mathbf{x}) = \sum_i h_i x_i + \sum_{i<j} J_{ij}\, x_i x_j + \lambda \Big( \sum_i x_i - N_B \Big)^2 .
-    $
+    $H(\mathbf{x}) = \sum_i h_i x_i + \sum_{i<j} J_{ij}\, x_i x_j + \lambda \Big( \sum_i x_i - N_B \Big)^2 .$
     
 4. **Solve.** Simulated annealing and composition-preserving QAOA are benchmarked against minima certified by exact enumeration, as a statevector simulation and as noisy sampling on Qiskit's FakeBrisbane device.
 5. **Analyze.** The best arrangements are relaxed and ranked with periodic DFT (which can be replaced with just VQE/SQD). Each metal node for the ranking gets a high-level correction through subtractive embedding, from CCSD (benchmark) or an active-space solver (CASCI, VQE, SQD). Agent A3 checks the top candidates against structural tests, the CoRE MOF 2024 and QMOF databases and the literature. If the energy model fails validation, agent A4 sends the run back to step 3 with a new Hamiltonian.
