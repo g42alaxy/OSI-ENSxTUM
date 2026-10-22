@@ -568,8 +568,8 @@ class PormakeBuilder:
         self.available = importlib.util.find_spec("pormake") is not None
 
     def build(self, topology_id: str, species_by_slot: list) -> dict:
-        #TODO: Task 01 — wire PORMAKE's topology/block API after verifying the installed version and its block
-        #TODO: database (validated 3D blocks with attachment points); add ToBaCCo behind this same adapter.
+        #TODO: Task 01 — per-decoration PORMAKE assembly (an edge block per slot). PORMAKE already builds the parent
+        #TODO: frameworks (protocols.topology_generation, topology_builders.py); decorations use parent_substitution_v1.
         if not self.available:
             raise BuildFailure("BUILDER_UNAVAILABLE", "pormake is not installed")
         raise BuildFailure("BUILDER_NOT_VERIFIED", "pormake API/block database not verified for this project")

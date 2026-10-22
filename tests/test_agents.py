@@ -82,8 +82,9 @@ class FakeValency:
 
 
 def controls(tmp_path, **overrides):
+    # These tests cover the three-role run (A4 off); the A4 optimisation loop is tested in test_scheme_pipeline.py.
     base = {"cache": {"dir": str(tmp_path / "cache")}, "mcp": {"valency": {"enabled": False}},
-            "literature": {"references": []}}
+            "literature": {"references": []}, "budget": {"max_optimisation_rounds": 0, "max_llm_requests": 3}}
     for key, value in overrides.items():
         base[key] = {**base.get(key, {}), **value}
     return load_controls(None, overrides=base)
@@ -350,7 +351,7 @@ def test_controls_use_environment_secrets_and_never_expose_them(monkeypatch, tmp
     assert ctl["openrouter"]["api_key"] == "sk-or-secret" and ctl.errors() == []
     assert "sk-or-secret" not in json.dumps(ctl.public()) and ctl.public()["openrouter"]["api_key"] == "<set>"
     assert ctl["literature"]["local_papers_dir"] == str(tmp_path / "papers")
-    assert ctl.max_llm_requests == 4
+    assert ctl.max_llm_requests == 7  # A1, A2, A67, A4 + one revision round (A67, A4) + the optional extra request
     assert ("INVALID_BUDGET", load_controls(path, {"budget": {"max_llm_requests": 5}}).errors()[0][1]) and \
         load_controls(path, {"budget": {"max_llm_requests": 5}}).errors()[0][0] == "INVALID_BUDGET"
 

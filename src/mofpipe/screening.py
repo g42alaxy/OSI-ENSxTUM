@@ -17,6 +17,8 @@ differences on representative seeds within tolerance. Decisions: reject only on 
 (no seed builds, or every relaxed seed transforms); deprioritise only with a calibrated potential and a declared
 ``energetic_policy``, by a margin of the threshold plus twice the calibration error (sampled minima are upper
 bounds, not the topology's minimum); uncertain topologies are kept. ``reinstate`` brings any topology back.
+``energetic_policy.allow_exploratory: true`` is an explicit opt-in to deprioritise on the uncalibrated ML gap (every
+seed relaxed, no domain flags); it is labelled EXPLORATORY_ML_GAP and stays auditable and reinstatable.
 """
 from __future__ import annotations
 
@@ -229,6 +231,15 @@ def screen(spec, store, evaluate) -> tuple[dict, dict]:
             state, reason = (("deprioritise", f"gap {gap:.4f} > {margin:.4f} eV/fu (threshold + 2 x calibration MAE)")
                              if gap > margin else ("uncertain", f"gap {gap:.4f} within the calibration margin")
                              if gap > threshold else ("retain", "within the declared energetic threshold"))
+        elif energetic and energetic.get("allow_exploratory") is True and not flags \
+                and statuses.get("SUCCEEDED", 0) == sum(statuses.values()):
+            # Declared opt-in: prioritise on the uncalibrated ML gap. Deprioritised, never rejected: the topology stays
+            # in the audit sample and protocols.screening.reinstate brings it back; the ranking label stays EXPLORATORY.
+            threshold = energetic["deprioritise_above_eV_per_formula_unit"]
+            gap = evidence["gap_to_best_eV_per_formula_unit"]
+            state, reason = (("deprioritise", f"EXPLORATORY_ML_GAP: {gap:.4f} > {threshold} eV/fu (uncalibrated, "
+                                              "declared allow_exploratory)") if gap > threshold
+                             else ("retain", f"EXPLORATORY_ML_GAP: {gap:.4f} <= {threshold} eV/fu (uncalibrated)"))
         else:
             partial = statuses.get("SUCCEEDED", 0) < sum(statuses.values()) or flags
             state = "uncertain" if partial else "retain"

@@ -33,6 +33,21 @@ You only need Python 3.10 or newer. No other packages are required for this step
 
 ```bash
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs
+# Task 07 benchmark: active-space export + ED/CASCI/VQE/SQD vs the published minimal-basis H2 values
+PYTHONPATH=src python3 -m mofpipe electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir runs/h2_benchmark
+# Task 07 embedding: finite-cluster subtractive scheme vs an independent full CCSD calculation (keto/enol)
+PYTHONPATH=src python3 -m mofpipe embedding-benchmark --spec benchmarks/embedding_keto_enol_hf_ccsd.json --run-dir runs/embedding_benchmark
+# physical plumbing toys with the mock pw.x: Milestone B (one topology) and Milestone C (two topologies, transfer cell, refinement)
+python3 -c "import sys; sys.path[:0] = ['tests']; import toy_framework as t; print(t.write_toy_project('runs/toy_b'), t.write_toy_milestone_c_project('runs/toy_c'))"
+PYTHONPATH=src python3 -m mofpipe run    --project runs/toy_c/project.json
+# real PySCF GPW calculations on the SYNTHETIC aluminium-formate toy: at the shipped 25 Ha cutoff the convergence
+# gate stops it (DFT_SETTINGS_NOT_CONVERGED, ~10 min); raise ke_cutoff_Ha and the series (~100 Ha) for a full run
+.venv/bin/python tests/pyscf_toy.py runs/toy_pyscf && PYTHONPATH=src .venv/bin/python -m mofpipe run --project runs/toy_pyscf/project.json
+# the physical_case recipe and the untouched template load as physical projects and stop at intake with their missing fields
+PYTHONPATH=src python3 -m mofpipe run    --project mof_no_agent_fixture/physical_case/recipe.json
+# tests: everything except the real-DFT checks; then the PySCF checks (minutes); the PySCF end-to-end run is opt-in
+.venv/bin/python -m pytest -m "not pyscf"
+.venv/bin/python -m pytest -m pyscf                 # MOFPIPE_SLOW_TESTS=1 adds the end-to-end formate run
 ```
 
 This runs the whole pipeline on a small synthetic test problem whose answer is known. It runs 6 times (2 problems × 3
@@ -284,9 +299,7 @@ fourth material in the paper, SIOC-COF2, is not included, because its graph coul
 {"engine": "orb", "model": "orb-v3-conservative-inf-omat", "dispersion": "D3BJ", "python": ".venv/bin/python",
  "relaxation": {"optimizer": "FIRE", "fmax_eV_per_A": 0.05, "max_steps": 400, "cell": "variable"}}
 
-// Step 5: QAOA sampling on a fake IBM device (optimizer.quantum_protocol)
-{"kind": "qpu_fake_device", "device": "fake_brisbane", "python": ".venv/bin/python"}
-```
+ToBaCCo is refused (`UNSUPPORTED_TOPOLOGY_BUILDER`): it is a script repository, not an installable package.
 
 To run any project on the AiiDA engine and record the provenance of every stage:
 
@@ -349,7 +362,6 @@ An agent run adds `agent/` (the agents' inputs, answers and request ledger), `pi
 | 4 | QUBO/HUBO compilation, cubic-to-quadratic reduction, constraints | `encoding.py` | 03 |
 | 5 | exact enumeration, branch and bound, simulated annealing | `optimization.py` | 04 |
 | 5 | QAOA (statevector simulation) | `qaoa.py` | 04 |
-| 5 | QAOA on fake IBM devices | `qpu.py`, `qpu_worker.py` | 04 |
 | 5 | symmetry deduplication, candidate pool, geometry matching | `candidates.py`, `geometry_match.py` | 05 |
 | 6 | choosing which structures get new DFT data | `acquisition.py` | 05 |
 | 6 | periodic DFT and cutoff convergence | `dft.py`, `pyscf_worker.py` | 06 |
@@ -366,26 +378,6 @@ The Spec column points to the matching brief in [instructions/](instructions/).
 </details>
 
 ## Limitations
-
-The following are not implemented yet:
-
-- **Structures:** no PORMAKE or ToBaCCo builders, no linker orientations, only diagonal supercells. Mixtures of more
-  than two linkers are supported only in the encoding layer, not end to end.
-- **Energy model:** only three-body terms can be reduced to a QUBO, not four-body ones. Triplet clusters are not
-  generated automatically for physical projects. Model uncertainties are not calibrated.
-- **DFT:** PySCF and Quantum ESPRESSO only (no VASP or CP2K). No DFT+U or hybrid functionals. Only the basis cutoff is
-  checked for convergence, not the k-point mesh. The GPU path follows the gpu4pyscf 1.8 API but has never run, because
-  no CUDA device was available.
-- **Embedding:** only the finite-cluster subtractive scheme. No wavefunction-in-DFT embedding.
-- **Quantum hardware:** simulators and fake IBM devices only. No runs on a real QPU, and no hardware SQD.
-- **Workflow:** everything runs locally, one job at a time. No HPC submission or parallel runs under AiiDA.
-- **Validation:** no phonons, PXRD or NMR. MOFChecker and Zeo++ run only when they are installed.
-- **Agents:** the A4 loop is triggered by a failed model fit, not yet by A3's verdict.
-- **Paper reproductions:** Kang et al. is reproduced as a standalone benchmark (3 of 4 materials). The Cai et al.
-  topology competition and the Fe–MOF-74 embedding study are not reproduced.
-
-Each gap is marked in the code with a `#TODO` comment (`grep -rn "#TODO" src`).
-
 A check that did not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed.
 
 ## License

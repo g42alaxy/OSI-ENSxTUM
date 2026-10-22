@@ -29,7 +29,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import time
 from fractions import Fraction
 from pathlib import Path
@@ -42,6 +41,7 @@ HARTREE_TO_EV = Fraction("27.211386245988")  # CODATA 2018
 ENERGY_EXPRESSION = ("E_corr[c] = E_PBC_low[c] + sum_k m_k (E_high[C_k] - E_low[C_k]); regions = node-centred "
                      "capped clusters, disjoint, covering every node of the cell")
 HIGH_METHODS = ("HF", "MP2", "CCSD", "CCSD(T)", "active_space")
+ACTIVE_SPACE_SOLVERS = ("exact_diagonalization", "pyscf_casci", "vqe_simulation", "sqd_simulation")
 ENGINES = ("pyscf", "external")
 CONSISTENCY_TOL_HA = Fraction(1, 10**8)  # high=low: the correction must vanish to numerical precision
 CLUSTER_HASH_DECIMALS = 4  # translation-equivalent clusters: identical relative coordinates to 1e-4 A
@@ -77,6 +77,9 @@ def protocol_errors(protocol: dict, dft_protocol: dict, budgets: dict, root: Pat
         errors.append(("UNSUPPORTED_HIGH_LEVEL", "protocols.embedding.high_level.method", str(high.get("method"))))
     elif high["method"] == "active_space" and not (high.get("active_space") and high.get("solver")):
         errors.append(("SCIENTIFIC_SPEC_MISSING", "protocols.embedding.high_level", "active_space and solver"))
+    elif high["method"] == "active_space" and high["solver"] not in ACTIVE_SPACE_SOLVERS:
+        errors.append(("UNSUPPORTED_HIGH_LEVEL", "protocols.embedding.high_level.solver",
+                       f"{high['solver']}: one of {list(ACTIVE_SPACE_SOLVERS)}"))
     validation = protocol["validation"] or {}
     series = validation.get("bond_hops_series")
     if not (isinstance(series, list) and all(type(h) is int and h >= 0 for h in series) and type(hops) is int

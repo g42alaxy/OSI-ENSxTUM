@@ -1,4 +1,11 @@
-"""Agent-assisted run: A1 -> screening -> A2 -> deterministic pipeline [-> A2 expansion] -> evidence -> A67.
+"""Agent-assisted run: A1 -> screening -> A2 -> deterministic pipeline [-> A2 expansion] -> evidence -> A67 -> A4
+[-> pipeline -> A67 -> A4 per Hamiltonian revision].
+
+OSI scheme mapping: text input -> A1 (topology selection among builder-generated or supplied frameworks) ->
+topology search (ML-potential screen) -> A2 (QUBO Hamiltonian) -> QUBO solved (exact/classical + QAOA) -> ground
+state of the top candidates (periodic DFT; node-cluster VQE/SQD in the embedding stage) -> A67 = scheme A3
+(confirmation against structural checks, papers and datasets) -> A4 (optimisation: accept, or revise the Hamiltonian
+choice when the evaluated candidates contradict it; bounded by budget.max_optimisation_rounds).
 
 A1 reads the user's general description (design brief) and decides, for every catalogue topology with validated
 inputs, whether it is analysed; the project is narrowed to the selected ones. The pipeline then builds and screens
@@ -30,7 +37,7 @@ from typing import TypedDict
 
 from ..contract import PipelineError, canonical_json, content_hash, make_record
 from ..gateway import review_proposal
-from ..intake import AGENT_ROLES, load_project, select_topologies
+from ..intake import load_project, select_topologies
 from ..orchestrator import run_pipeline
 from ..store import RunStore
 from . import packets
@@ -38,7 +45,8 @@ from .client import AgentCallError, Cache, Ledger, OpenRouterClient, call_role
 from .contracts import ROLE_ACTION
 from .datasets import gather_datasets
 from .literature import LocalPapers, ValencyMCP, gather_evidence
-from .validate import render_assessment, validate_assessment, validate_hamiltonian_proposal, validate_setup
+from .validate import (render_assessment, validate_assessment, validate_hamiltonian_proposal, validate_optimisation,
+                       validate_setup)
 
 
 class AgentState(TypedDict, total=False):
@@ -49,6 +57,10 @@ class AgentState(TypedDict, total=False):
     expansion_used: bool
     evidence: dict
     assessment: dict
+    assessment_output: dict
+    round: int
+    grid_history: list
+    optimisation: list
     stop: dict
 
 
@@ -158,8 +170,9 @@ class AgentRun:
 
     def agent_spec(self, setup: dict, grid: dict):
         """The project as the pipeline sees it: agents enabled, validated plans and model grid attached."""
-        runtime = {"enabled": True, "llm_calls_allowed": True, "roles": list(AGENT_ROLES),
-                   "max_llm_requests": self.controls.max_llm_requests}
+        runtime = {"enabled": True, "llm_calls_allowed": True, "roles": list(self.controls.roles),
+                   "max_llm_requests": self.controls.max_llm_requests,
+                   "optimisation_rounds": self.controls.optimisation_rounds}
         spec = self.work_spec(setup)
         config = {**spec.config, "runtime_agents": runtime}
         plan = {"construction_plans": setup["plans"], "excluded_topologies": setup["excluded"], "model_grid": grid,
@@ -198,6 +211,8 @@ class AgentRun:
         return {"expansion_used": True, "model_grid": v["model_grid"]}
 
     def node_evidence(self, state: AgentState) -> dict:
+        if state.get("evidence"):  # retrieval does not depend on the Hamiltonian; later rounds reuse it
+            return {}
         valency, local, gaps = self.valency, self.local, []
         v_cfg, lit = self.controls["mcp"]["valency"], self.controls["literature"]
         if valency is None and v_cfg["enabled"]:
@@ -223,15 +238,52 @@ class AgentRun:
         packet = packets.build_a67_packet(spec, report, last["run_dir"], state["evidence"], self.run_id,
                                           assessment_cfg["top_k_candidates"],
                                           assessment_cfg.get("required_checks") or packets.DEFAULT_REQUIRED_CHECKS, datasets)
+        round_index = state.get("round", 0)
         try:
-            output, v = self._ask("A67", packet, validate_assessment)
+            output, v = self._ask("A67", packet, validate_assessment, purpose=self._purpose(round_index))
         except AgentCallError as exc:
             return self._stop(exc.code, exc.detail)
-        (self.run_dir / "assessment.json").write_text(json.dumps({"assessment": output, "validation": v}, indent=2) + "\n")
-        (self.run_dir / "assessment.md").write_text(render_assessment(output, packet, v))
+        suffix = f"_round{round_index}" if round_index else ""
+        (self.run_dir / f"assessment{suffix}.json").write_text(json.dumps({"assessment": output, "validation": v}, indent=2) + "\n")
+        (self.run_dir / f"assessment{suffix}.md").write_text(render_assessment(output, packet, v))
+        if suffix:  # the latest assessment is always assessment.md
+            (self.run_dir / "assessment.md").write_text(render_assessment(output, packet, v))
         return {"assessment": {"status": output["status"], "validation": v["status"], "errors": v["errors"],
-                               "n_dataset_records": len(datasets["records"]), "n_metrics": len(datasets["metrics"]),
-                               "dataset_gaps": datasets["gaps"]}}
+                               "round": round_index, "n_dataset_records": len(datasets["records"]),
+                               "n_metrics": len(datasets["metrics"]), "dataset_gaps": datasets["gaps"]},
+                "assessment_output": {k: v_ for k, v_ in output.items() if k != "report_markdown"}}
+
+    @staticmethod
+    def _purpose(round_index: int) -> str:
+        return "initial" if round_index == 0 else f"round_{round_index}"
+
+    def node_a4(self, state: AgentState) -> dict:
+        """Optimisation checkpoint: accept the candidates, or revise the Hamiltonian and re-run from fitting."""
+        last, round_index = state["attempts"][-1], state.get("round", 0)
+        report = json.loads((Path(last["run_dir"]) / "report.json").read_text())
+        history = list(state.get("grid_history") or [state["model_grid"]])
+        spec, setup = self.a2_inputs(state)
+        packet = packets.build_a4_packet(spec, setup, report, last["run_dir"], state.get("assessment_output"),
+                                         state["model_grid"], history, self.run_id, round_index,
+                                         self.controls.optimisation_rounds, state.get("screening"))
+        try:
+            output, v = self._ask("A4", packet, validate_optimisation, purpose=self._purpose(round_index))
+        except AgentCallError as exc:
+            return self._stop(exc.code, exc.detail)
+        entry = {"round": round_index, "decision": output["decision"], "reason_codes": output["reason_codes"],
+                 "validation": v["status"], "errors": v["errors"], "facts": packet["candidate_quality"]["facts"],
+                 "model_grid_before": state["model_grid"]}
+        optimisation = list(state.get("optimisation") or [])
+        if v["status"] == "VALID" and v["decision"] == "REVISE_HAMILTONIAN" and v["executable"]:
+            entry.update(executed=True, model_grid_after=v["model_grid"], changed_topologies=v["changed_topologies"])
+            optimisation.append(entry)
+            return {"optimisation": optimisation, "model_grid": v["model_grid"], "round": round_index + 1,
+                    "grid_history": history + [v["model_grid"]]}
+        entry.update(executed=False, outcome=("ACCEPTED" if v["status"] == "VALID" and v["decision"] == "ACCEPT" else
+                                              "REVISION_NOT_EXECUTED_NO_ROUNDS_LEFT" if v["status"] == "VALID"
+                                              else "REJECTED_OUTPUT"))
+        optimisation.append(entry)
+        return {"optimisation": optimisation, "grid_history": history}
 
     def node_finalize(self, state: AgentState) -> dict:
         attempts = state.get("attempts") or []
@@ -250,6 +302,8 @@ class AgentRun:
                    "screening": state.get("screening"),
                    "model_grid": state.get("model_grid"), "expansion_used": bool(state.get("expansion_used")),
                    "pipeline_attempts": attempts, "assessment": assessment or None,
+                   "optimisation_rounds_allowed": self.controls.optimisation_rounds,
+                   "optimisation": state.get("optimisation") or [], "hamiltonian_revisions": state.get("round", 0),
                    "evidence_gaps": (state.get("evidence") or {}).get("gaps"), "decision_ids": self.decisions,
                    "controls": self.controls.public()}
         self.ledger.save()
@@ -258,6 +312,10 @@ class AgentRun:
 
     # -- routing -------------------------------------------------------------------------------------------
     def routes(self) -> dict:
+        def after_a4(s):
+            last = (s.get("optimisation") or [{}])[-1]
+            return "pipeline" if last.get("executed") and not s.get("stop") else "finalize"
+
         def after_pipeline(s):
             inadequate = s["attempts"][-1]["model_selection_error"] == "MODEL_INADEQUATE"
             expand = self.controls["budget"]["allow_model_expansion"] and self.ledger.extra_available
@@ -270,13 +328,15 @@ class AgentRun:
             "pipeline": (after_pipeline, ["a2_expand", "evidence"]),
             "a2_expand": (lambda s: "evidence" if s.get("stop") else "pipeline", ["pipeline", "evidence"]),
             "evidence": (lambda s: "a67_assessment", ["a67_assessment"]),
-            "a67_assessment": (lambda s: "finalize", ["finalize"]),
+            "a67_assessment": (lambda s: "a4_optimise" if self.controls.optimisation_rounds and not s.get("stop") else "finalize",
+                               ["a4_optimise", "finalize"]),
+            "a4_optimise": (after_a4, ["pipeline", "finalize"]),
         }
 
     def nodes(self) -> dict:
         return {"a1_setup": self.node_a1, "screen": self.node_screen, "a2_hamiltonian": self.node_a2, "pipeline": self.node_pipeline,
                 "a2_expand": self.node_a2_expand, "evidence": self.node_evidence, "a67_assessment": self.node_a67,
-                "finalize": self.node_finalize}
+                "a4_optimise": self.node_a4, "finalize": self.node_finalize}
 
     def run(self, engine: str = "auto") -> dict:
         graph, used = build_graph(self.nodes(), self.routes(), engine)

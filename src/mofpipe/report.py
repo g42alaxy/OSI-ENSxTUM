@@ -158,9 +158,10 @@ def _topology_section(spec, ctx, tid) -> dict:
 
 
 def _agent_section(spec) -> dict:
-    """Validated A1/A2 decisions this run used; A67 reviews the finished report (agents/runner.py)."""
+    """Validated A1/A2 (and A4 revision) decisions this run used; A67 reviews the finished report (agents/runner.py)."""
     plan = spec.agent_plan
-    return {"roles": ["A1", "A2", "A67"], "decision_ids": plan["decision_ids"], "design_brief": plan.get("design_brief"),
+    return {"roles": list(spec.config.get("runtime_agents", {}).get("roles") or ["A1", "A2", "A67"]),
+            "decision_ids": plan["decision_ids"], "design_brief": plan.get("design_brief"),
             "construction_plans": plan["construction_plans"], "excluded_topologies": plan.get("excluded_topologies"),
             "model_grid": plan["model_grid"], "llm_requests_before_pipeline": plan["llm_requests_before_pipeline"],
             "note": "Agents chose catalogue options only; fitting, selection, solving and ranking are deterministic."}

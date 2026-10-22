@@ -1,4 +1,8 @@
-"""Strict output contracts, fixed code enumerations and system prompts for A1, A2 and A67 (guide sections 3-8).
+"""Strict output contracts, fixed code enumerations and system prompts for A1, A2, A67 and A4 (guide sections 3-8).
+
+Roles map onto the OSI scheme as: A1 topology selection, A2 QUBO Hamiltonian construction, A67 confirmation
+(scheme A3: physical correctness and comparison with papers/datasets), A4 optimisation (revise the Hamiltonian
+choice when the evaluated candidates contradict it).
 
 Every object has all keys required and ``additionalProperties: false``. A1/A2 have no free-text fields. The
 schema sent to the provider (``transport_schema``) drops bound keywords some strict-mode endpoints reject; the
@@ -7,8 +11,8 @@ full schema, bounds included, is always validated locally. Valid JSON is not suf
 """
 from __future__ import annotations
 
-CONTRACT_VERSION = "mof-agents-2026-10-22b"
-PROMPT_VERSION = "p2"
+CONTRACT_VERSION = "mof-agents-2026-10-22c"
+PROMPT_VERSION = "p3"
 
 PROPOSAL_STATUS = ["OK", "NEEDS_INPUT", "UNSUPPORTED"]
 A1_CODES = ["MISSING_BLOCK", "MISSING_GEOMETRY", "NONINTEGRAL_COMPOSITION", "AMBIGUOUS_MAPPING", "INCOMPATIBLE_BLOCK",
@@ -94,8 +98,26 @@ A2_DESIGN_SCHEMA = _obj({
     "error_codes": _arr({"type": "string", "enum": A2_CODES}, 16),
 })
 
-SCHEMAS = {"A1": A1_SCHEMA, "A2": A2_SCHEMA, "A67": A67_SCHEMA, "A2_design": A2_DESIGN_SCHEMA}
-ROLE_ACTION = {"A1": "select_construction_options", "A2": "propose_model_candidates", "A67": "write_final_assessment"}
+# A4 (optimisation): accept the evaluated candidates or revise the Hamiltonian choice. Factual reason codes are
+# checked by code against the packet's candidate_quality facts.
+A4_DECISIONS = ["ACCEPT", "REVISE_HAMILTONIAN"]
+A4_REASONS = ["CANDIDATES_CONSISTENT", "SURROGATE_RANKING_DISAGREES_WITH_DFT", "SURROGATE_ERROR_ABOVE_TOLERANCE",
+              "SURROGATE_BEST_NOT_DFT_BEST", "MODEL_INADEQUATE", "STRUCTURAL_CHECK_FAILED", "ASSESSMENT_INCOMPLETE",
+              "NO_UNTRIED_MODEL"]
+A4_SCHEMA = _obj({
+    "decision": {"type": "string", "enum": A4_DECISIONS},
+    "reason_codes": _arr({"type": "string", "enum": A4_REASONS}, 8, 1),
+    "topologies": _arr(_obj({
+        "topology_id": _ID, "encoding_id": _ID, "candidate_model_ids": _arr(_ID, 3, 1),
+        "compiler_id": _ID, "constraint_policy_id": _ID,
+    }), 64),
+    "missing_input_ids": _arr(_ID, 64),
+    "error_codes": _arr({"type": "string", "enum": A2_CODES}, 16),
+})
+
+SCHEMAS = {"A1": A1_SCHEMA, "A2": A2_SCHEMA, "A67": A67_SCHEMA, "A4": A4_SCHEMA, "A2_design": A2_DESIGN_SCHEMA}
+ROLE_ACTION = {"A1": "select_construction_options", "A2": "propose_model_candidates", "A67": "write_final_assessment",
+               "A4": "revise_hamiltonian"}
 _TRANSPORT_DROP = {"minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum"}
 
 
@@ -141,6 +163,17 @@ PROMPTS = {
                   " choice on the material's chemistry and geometry. Do not output coefficients, energies or predicted"
                   " arrangements. Output only schema-valid JSON; no prose. Allowed error codes: " + ", ".join(A2_CODES)
                   + "." + _COMMON),
+    "A4": ("You are A4, the optimisation step. The pipeline fitted the Hamiltonian chosen earlier (current_model_grid),"
+           " solved it, evaluated the best arrangements with the expensive method and A67 assessed them. candidate_quality"
+           " holds code-computed facts comparing the surrogate (fitted Hamiltonian) with the evaluated energies;"
+           " fit_results holds the validation of every tried model. Decide: ACCEPT the candidates, or REVISE_HAMILTONIAN"
+           " by proposing, for the topologies that need it, a different set of at most three model_catalogue IDs (rows"
+           " in the A2 format, frozen encoding and constraint policy, a compiler that supports every model degree)."
+           " Revise only when candidate_quality or the assessment shows the candidates are wrong (ranking disagreement,"
+           " surrogate error above tolerance, surrogate best not the evaluated best, model inadequate) and an untried"
+           " model can address it; never repeat a grid listed in grid_history. Reason codes must be supported by the"
+           " facts; CANDIDATES_CONSISTENT only when no disagreement fact is true. Output only schema-valid JSON;"
+           " topologies is empty for ACCEPT. No prose, coefficients or energies." + _COMMON),
     "A67": ("You are A67, the final reviewer. Assess the supplied structural-check evidence for every final candidate"
             " and compare the candidates with the retrieved published evidence. Preserve mandatory numerical verdicts:"
             " never report PASS_CHECKED_CRITERIA when a required check failed, was skipped or is missing. In"
