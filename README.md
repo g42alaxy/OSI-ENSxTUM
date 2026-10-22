@@ -1,5 +1,11 @@
 # QuMOF: quantum-enhanced modelling of multivariate MOFs
 
+<div align="center">
+  
+[![Presentation](https://img.shields.io/badge/📊_Presentation-Google_Slides-orange)](https://docs.google.com/presentation/d/1q_MO2JOv1MwF3GlOxD19ZWfdUDwSwppJ/edit?usp=sharing&ouid=115306472035042428210&rtpof=true&sd=true)
+</div>
+
+
 Dmitrii Zhiganov, Matvei Anoshin, Gintaras Gliaudelis
 
 QuMOF predicts how linkers arrange in multivariate metal–organic frameworks (MTV-MOFs), starting from a plain-text design brief. LLM agents choose topologies and Hamiltonian forms, a DFT-fitted QUBO is solved by simulated annealing and composition-preserving QAOA, and the best structures are ranked by periodic DFT with quantum-embedded corrections at the metal nodes.
