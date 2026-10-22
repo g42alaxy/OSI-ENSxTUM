@@ -13,7 +13,7 @@ Periodic DFT runs through an engine adapter (section 5). **PySCF** is the primar
 
 Passing results prove that the software path and its bookkeeping are correct. They say nothing about real MOF energetics. Everything not implemented is listed in [TODO.md](TODO.md).
 
-Python ≥ 3.10. The pipeline core is standard-library Python. The PySCF engine needs `pyscf`, `pyscf-dispersion` and `ase` (`pyproject.toml`); the GPU switch also needs `gpu4pyscf`; tests use pytest. About 6,400 lines of pipeline code and 2,250 lines of tests.
+Python ≥ 3.10. The pipeline core is standard-library Python. The PySCF engine needs `pyscf`, `pyscf-dispersion` and `ase` (`pyproject.toml`); the GPU switch also needs `gpu4pyscf`; tests use pytest. About 7,400 lines of pipeline code and 2,450 lines of tests.
 
 ```bash
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs   # 6 runs + acceptance
@@ -41,7 +41,7 @@ flowchart LR
 | refinement | `refinement.py` | Off by default (`DISABLED_BY_CONFIG`). When enabled: bounded active learning (≤ 3 iterations) that acquires base-fidelity labels for training-split orbits only and stops with `CONVERGED_WITHIN_SCOPE` / `MODEL_INADEQUATE` / `BUDGET_EXHAUSTED` / `INCONCLUSIVE`. | `RefinementReport` |
 | model_selection | `configuration_model.py` | Fits each candidate model M0/M1/M2 per graph by exact rational least squares on training labels only, measures development RMSE, and picks the fewest parameters among those within the threshold (tie → model ID). Rank-deficient fits are recorded as failed; no passing model → `MODEL_INADEQUATE` and the run halts. The constant (graph offset) is kept. | `ModelSelectionReport`, `HamiltonianArtifact` |
 | encoding | `encoding.py` | Compiles the physical polynomial plus `λ(Σx − 6)²` into a QUBO (constant, linear, upper-triangle-once quadratic). For the cubic M2, the QUBO target is rejected with `UNSUPPORTED_HIGHER_ORDER_WITHOUT_QUADRATIZATION` and a HUBO keeps every triplet term. The energy identity is checked exactly on all 4,096 bit strings, including infeasible ones; the penalized minimum must be feasible. | `EncodingArtifact`, `EncodingVerification` |
-| optimization | `optimization.py` | Exact enumeration of the 924 feasible states, certified optimal, keeping all degenerate minimizers. Each state is re-scored with the physical model and cross-checked against the encoding. Simulated annealing exists as an uncertified heuristic (used in tests). QAOA/QPU: `DISABLED_BY_CONFIG`. | `SolverResult` |
+| optimization | `optimization.py` | Exact enumeration of the 924 feasible states, certified optimal, keeping all degenerate minimizers. Each state is re-scored with the physical model and cross-checked against the encoding. Simulated annealing exists as an uncertified heuristic. Optional: branch-and-bound cross-check and a QAOA simulation benchmark (Milestone D, section 7). QPU: `DISABLED_BY_CONFIG`. | `SolverResult` |
 | candidates | `candidates.py` | Deduplicates by orbit within each graph. Keeps the best 5 unique orbits per graph plus every tie at the cutoff, with machine-readable selection reasons and degeneracy groups. | `CandidateSet`, `CandidatePool` |
 | evaluation | `electronic.py` | Sends the pool to the expensive-evaluation boundary: the fixture's `tools/mock_evaluator.py`, run **as a subprocess** so the learner never imports the oracle formula. Jobs have idempotency keys and states; responses are checked for identity, units, normalization, fidelity, provenance and correction arithmetic. Base and corrected energies are separate fields with separate fidelities, and these labels are never used for training. DFT, embedding, FCI, VQE and SQD are reported as not executed. | `CalculationResult` |
 | ranking | `ranking.py` | Ranks the pool separately at base and corrected level, after compatibility checks. Exact ties are recorded as true degeneracies, and coverage is stated as "screened finalist pool, not a global certificate". Reference-phase competition: `INCOMPLETE`. | `RankingReport`, `CompetitionReport` |
@@ -278,7 +278,30 @@ The mock energy has a node-mediated N–N term plus a weak orientation-dependent
 - **Validation.** Absent tools are reported as skipped; an overlapping atom fails the distance check.
 - **Intake.** Errors for: missing transfer policy, non-transferable features, missing stable-round count, negative weights, a topology/source mismatch, an unknown reference set. Each topology keeps its own cell counts.
 
-## 7. What the tests do not establish
+## 7. Milestone D: quantum optimisation benchmark and electronic active-space solvers
+
+| Piece | Module | What it does |
+|---|---|---|
+| Quadratization (T03.4) | `encoding.py` | Policy `higher_order: "quadratize"`. Rosenberg substitution of cubic terms with one ancilla per pair and a stated penalty M = 2·Σ\|c\|. Verification minimizes over ancillas on all 2ⁿ decision strings. Fixture `higher_order`: ring12 11 ancillas, prism6 23, exact identity, feasible minimum, unchanged winner. |
+| Constraints and bounds (T03.5) | `encoding.py` | One count constraint per sublattice. Every encoding records the single-flip penalty bound L (λ > L certifies a feasible minimum without enumeration). One-hot QUBO for >2 species per slot, certified exhaustively on small instances. |
+| Branch and bound (T04.1) | `optimization.py` | Exact fixed-count minimization in integer arithmetic. Certified on completion; at a node or time limit it returns the greedy-seeded incumbent with lower bound and gap. Optional cross-check against enumeration in the optimization stage. |
+| QAOA simulation (T04.2) | `qaoa.py` | Feasible-subspace statevector, XY exchange mixer over `pairs_distance_1`, Dicke initial state, seeded Nelder–Mead, shots, decode and re-evaluate. Full-register mixer-constraint check. Benchmark against exact and annealing across seeds. Recorded in the optimization stage as `QuantumBenchmark`; it never changes the candidate pool. |
+| Active space (T07.1) | `active_space.py` | PySCF RHF/ROHF → CASCI integrals → FCIDUMP + `ActiveSpaceArtifact` (h1, h2, E_core, spin counts, ordering, convention, hashes, orbital character). Bare systems only (`embedding: none`). |
+| Electronic solvers (T07.2) | `electronic_solvers.py` | Independent determinant ED, PySCF CASCI on the stored integrals, Jordan–Wigner UCCSD VQE (simulated), SQD from simulated samples with recovery; hardware SQD `BLOCKED`. All share one `hamiltonian_hash`. |
+
+**Published benchmark** (`benchmarks/h2_sto3g_szabo_ostlund.json`, CLI `electronic-benchmark`): minimal-basis H₂ at R = 1.4 a₀. HF is −1.11671 Ha against the published −1.1167, full CI −1.13728 against −1.1373. ED, CASCI, VQE and SQD agree; status `REPRODUCED`. On LiH CAS(4,4), ED and PySCF FCI agree to 10⁻¹⁴ Ha, UCCSD-VQE is 8×10⁻⁹ Ha above, and SQD stays variational.
+
+### Tests (`test_milestone_d.py`, 8)
+- **Quadratization:** default policy still rejects a cubic QUBO; ancilla-minimized identity exact; feasible minimum; a wrong ancilla decode rule is caught.
+- **Constraints and one-hot:** penalty bound certification and its honest failure for λ = 0.001 eV; two-sublattice counts; one-hot encoded minimum equals the physical minimum and is feasible.
+- **Branch and bound:** agrees with enumeration on six Hamiltonians, frustrated ones included; at a node limit, lower bound ≤ optimum ≤ incumbent.
+- **QAOA mixers:** exchange mixer preserves binary and one-hot constraints, the X mixer does not; exchanges stay within the multicomponent feasible set; a mislabelled coupling is caught as `ENCODING_DECODE_MISMATCH`.
+- **QAOA benchmark:** reaches the exact minimum for every seed, amplifies the optimum above 10× uniform, and records full provenance.
+- **Pipeline:** quadratize + branch and bound + QAOA on the fixture completes with the expected winner; a QPU protocol is refused.
+- **Electronic solvers:** LiH CAS(4,4) export is reproducible with an exact FCIDUMP round trip; ED = CASCI; VQE ≥ ED within 10⁻⁶; SQD variational; identical hash everywhere; embedding refused.
+- **Published H₂:** the CLI reproduces it within 10⁻⁴ Ha; VQE matches ED; hardware SQD is blocked; the correction is `UNVALIDATED`.
+
+## 8. What the tests do not establish
 
 - **MOF physics.** No real MOF structure, ML potential, embedding or quantum circuit is involved. The fixture corrections are artificial bookkeeping tests.
   - The PySCF engine is checked against independent PySCF calculations and finite differences on tiny cells (Si₂, H₂), and end to end on a SYNTHETIC formate toy. That shows the energies, forces and stresses it returns are the derivatives of the energy it reports. It does not show that a minimal GTH basis, a given cutoff or Gamma-point sampling is adequate for a MOF; that is what the convergence studies of a real project must establish.

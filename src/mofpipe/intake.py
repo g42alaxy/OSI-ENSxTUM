@@ -286,7 +286,8 @@ def validate_project(spec: ProjectSpec) -> dict:
           f"{sum(counts.values())} != {spec.n_sites}")
     check("encoding_matches_building_blocks", enc == bb_species and set(enc) == set(counts),
           "ENCODING_MISMATCH", f"{enc} vs {bb_species}")
-    #TODO: Task 03/04 — multicomponent (one-hot) species encodings and per-sublattice composition counts.
+    #TODO: Task 03 — multicomponent decorations, features and enumeration across the pipeline; the encoding layer
+    #TODO: (encoding.compile_one_hot, per-sublattice count constraints) and the QAOA exchange mixer already support it.
     check("binary_encoding", sorted(enc.values()) == [0, 1], "UNSUPPORTED_MULTICOMPONENT_ENCODING", str(enc))
 
     for topo in spec.topologies.values():
@@ -328,14 +329,17 @@ def validate_project(spec: ProjectSpec) -> dict:
     opt = cfg.get("optimizer", {})
     check("optimizer_method", opt.get("method") == "exact_enumeration", "UNSUPPORTED_SOLVER", str(opt.get("method")))
     check("optimizer_fixed_composition", opt.get("restrict_to_composition") is True, "UNSUPPORTED_SOLVER")
-    #TODO: Task 04 — accept quantum solver protocols once QAOA simulation / QPU adapters exist.
-    check("quantum_disabled", opt.get("quantum_enabled") is False, "UNSUPPORTED_QUANTUM_BACKEND")
+    check("optimizer_cross_checks", set(opt.get("cross_check_solvers", [])) <= {"branch_and_bound"}, "UNSUPPORTED_SOLVER",
+          str(opt.get("cross_check_solvers")))
+    from .qaoa import protocol_errors
+    check("quantum_protocol", opt.get("quantum_enabled") is False or not protocol_errors(opt.get("quantum_protocol")),
+          "SCIENTIFIC_SPEC_MISSING", f"optimizer.quantum_protocol: {protocol_errors(opt.get('quantum_protocol'))}")
     qubo = cfg.get("qubo", {})
     penalty = qubo.get("ratio_penalty_eV")
     check("qubo_format", qubo.get("format") == "upper_triangle_once", "UNSUPPORTED_ENCODING_FORMAT")
     check("qubo_penalty", isinstance(penalty, (int, float)) and not isinstance(penalty, bool) and penalty > 0,
           "SCIENTIFIC_SPEC_MISSING", "qubo.ratio_penalty_eV")
-    check("qubo_higher_order_policy", qubo.get("higher_order") == "retain_HUBO_or_explicitly_reject",
+    check("qubo_higher_order_policy", qubo.get("higher_order") in ("retain_HUBO_or_explicitly_reject", "quadratize"),
           "UNSUPPORTED_ENCODING_POLICY")
     dedup = cfg.get("deduplication", {})
     check("no_species_label_exchange", dedup.get("allow_species_label_exchange") is False,

@@ -19,9 +19,15 @@ PHYSICAL_EXECUTED = ("MOFChecker/CrystalNets/Zeo++", "reference phase-competitio
 
 
 def not_executed(spec) -> list:
+    executed = set()
+    if spec.config["optimizer"].get("quantum_enabled"):
+        executed.add("QAOA simulation")
+    if spec.config["qubo"].get("higher_order") == "quadratize":
+        executed.add("quadratization of higher-order models")
     if spec.project_type == "synthetic_fixture":
-        return NOT_EXECUTED
-    out = [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS + PHYSICAL_EXECUTED] + NOT_EXECUTED_PHYSICAL
+        return [x for x in NOT_EXECUTED if x not in executed]
+    out = [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS + PHYSICAL_EXECUTED + tuple(executed)]
+    out += NOT_EXECUTED_PHYSICAL
     physical = spec.physical or {}
     if not any((physical.get("transfer_topologies") or {}).values()):
         out.append("larger-supercell transfer test (T01.5): no transfer cell declared")

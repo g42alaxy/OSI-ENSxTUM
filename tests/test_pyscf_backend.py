@@ -18,7 +18,7 @@ pytest.importorskip("pyscf")
 pytest.importorskip("pyscf.dispersion")
 pytestmark = pytest.mark.pyscf
 import numpy as np  # noqa: E402
-from pyscf_toy import pyscf_dft_protocol, write_pyscf_toy_project  # noqa: E402
+from pyscf_toy import write_pyscf_toy_project  # noqa: E402
 
 from mofpipe import dft, pyscf_worker as worker  # noqa: E402
 from mofpipe.intake import load_project, validate_project  # noqa: E402

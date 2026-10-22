@@ -18,6 +18,8 @@ All physical results so far are on **SYNTHETIC** toy frameworks. Do not read the
 PYTHONPATH=src python3 -m mofpipe run    --project mof_no_agent_fixture/project.json --case higher_order --correction topology_dependent
 PYTHONPATH=src python3 -m mofpipe accept --project mof_no_agent_fixture/project.json
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs
+# Task 07 benchmark: active-space export + ED/CASCI/VQE/SQD vs the published minimal-basis H2 values
+PYTHONPATH=src python3 -m mofpipe electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir runs/h2_benchmark
 # physical plumbing toys with the mock pw.x: Milestone B (one topology) and Milestone C (two topologies, transfer cell, refinement)
 python3 -c "import sys; sys.path[:0] = ['tests']; import toy_framework as t; print(t.write_toy_project('runs/toy_b'), t.write_toy_milestone_c_project('runs/toy_c'))"
 PYTHONPATH=src python3 -m mofpipe run    --project runs/toy_c/project.json
@@ -43,11 +45,13 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 | parent-lattice cluster orbits (point/pair, periodic, per formula unit) | `clusters.py` | 03 |
 | features, exact fit, model selection (fixture split; grouped CV + frozen holdout for physical projects) | `configuration_model.py` | 03 |
 | supercell replication and transfer checks | `transfer.py` | 01, 03 |
-| QUBO / HUBO compilation and 2ⁿ identity check | `encoding.py` | 03 |
-| exact enumeration, simulated annealing | `optimization.py` | 04 |
+| QUBO / HUBO compilation, cubic quadratization, sublattice constraints, penalty bound, one-hot; 2ⁿ identity check | `encoding.py` | 03 |
+| exact enumeration, branch and bound (certified or with gap), simulated annealing | `optimization.py` | 04 |
+| QAOA statevector simulation with exchange mixer; benchmark vs exact and annealing | `qaoa.py` | 04 |
 | symmetry dedup, top-k pool; relaxed-geometry equivalence | `candidates.py`, `geometry_match.py` | 05 |
 | acquisition policy (energy / uncertainty / diversity / audit) | `acquisition.py` | 05 |
 | evaluator boundary (fixture mock backend as subprocess) | `electronic.py` | 06/07 boundary |
+| active-space export (FCIDUMP + metadata); ED, PySCF CASCI, simulated VQE and SQD on one Hamiltonian | `active_space.py`, `electronic_solvers.py` | 07 |
 | periodic DFT: engine adapters, jobs, cutoff convergence of energy differences | `dft.py`, `pyscf_worker.py` | 06 |
 | refinement: fixture active learning; physical rounds with declared stopping rules | `refinement.py`, `orchestrator.py` | 08 |
 | ranking, reference-phase competition, structural validation, report | `ranking.py`, `references.py`, `validation.py`, `report.py` | 09 |
@@ -55,4 +59,4 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for what each stage does and what every test checks, and [TODO.md](TODO.md) for every unimplemented part (`#TODO` markers in code) and what it requires.
 
-Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, ML potentials and screening, DFT+U and hybrid functionals in the PySCF engine, embedding, FCI/VQE/SQD, QAOA, quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, live literature review, runtime agents. MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.
+Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, ML potentials and screening, DFT+U and hybrid functionals in the PySCF engine, embedding and corrected-energy assembly, hardware SQD and QPU adapters, multicomponent decorations beyond the encoding layer, quartic quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, live literature review, runtime agents. MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.

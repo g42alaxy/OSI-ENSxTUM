@@ -47,7 +47,6 @@ NOT_YET_SUPPORTED = {  # field -> (code, task) when set to a non-empty value
     "protocols.ml_calibration": ("UNSUPPORTED_ML_POTENTIAL", "T02.3"),
     "protocols.embedding": ("UNSUPPORTED_ELECTRONIC_BACKEND", "T07.1"),
     "protocols.active_space": ("UNSUPPORTED_ELECTRONIC_BACKEND", "T07.1"),
-    "protocols.quantum_solvers": ("UNSUPPORTED_QUANTUM_BACKEND", "T04.2"),
     "runtime.llm_provider": ("AGENT_LAYER_NOT_IMPLEMENTED", "T10.2"),
     "runtime.llm_model": ("AGENT_LAYER_NOT_IMPLEMENTED", "T10.2"),
 }
@@ -242,8 +241,19 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
     tol_geo = validation_policy.get("geometry_equivalence_tolerance_A")
     if tol_geo is not None and (isinstance(tol_geo, bool) or not isinstance(tol_geo, (int, float)) or tol_geo <= 0):
         errors.append(_err("INVALID_NUMBER", "protocols.validation.geometry_equivalence_tolerance_A", str(tol_geo)))
-    if (protocols.get("classical_solvers") or ["exact_enumeration"]) != ["exact_enumeration"]:
+    solvers = protocols.get("classical_solvers") or ["exact_enumeration"]
+    if solvers[0] != "exact_enumeration" or not set(solvers) <= {"exact_enumeration", "branch_and_bound"}:
         errors.append(_err("UNSUPPORTED_SOLVER", "protocols.classical_solvers", str(protocols["classical_solvers"])))
+    from .qaoa import protocol_errors as quantum_errors
+    quantum = protocols.get("quantum_solvers") or []
+    if len(quantum) > 1:
+        errors.append(_err("UNSUPPORTED_QUANTUM_BACKEND", "protocols.quantum_solvers", "one QAOA simulation protocol"))
+    for i, q in enumerate(quantum[:1]):
+        errors += [_err("SCIENTIFIC_SPEC_MISSING", f"protocols.quantum_solvers[{i}].{k}") for k in quantum_errors(q)]
+    if (protocols.get("encoding") or {}).get("higher_order", "retain_HUBO_or_explicitly_reject") not in (
+            "retain_HUBO_or_explicitly_reject", "quadratize"):
+        errors.append(_err("UNSUPPORTED_ENCODING_POLICY", "protocols.encoding.higher_order",
+                           str(protocols["encoding"]["higher_order"])))
     if (config.get("runtime") or {}).get("engine") not in (None, "local", "aiida_recommended"):
         errors.append(_err("UNSUPPORTED_WORKFLOW_ENGINE", "runtime.engine", str(config["runtime"]["engine"])))
 
@@ -305,7 +315,10 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
                             "no_passing_model": "MODEL_INADEQUATE",
                             "policy": "Select the fewest effective parameters among models passing grouped CV; "
                                       "then lowest CV RMSE; then model ID"},
-        "optimizer": {"method": "exact_enumeration", "restrict_to_composition": True, "quantum_enabled": False},
+        "optimizer": {"method": "exact_enumeration", "restrict_to_composition": True,
+                      "cross_check_solvers": [s for s in (protocols.get("classical_solvers") or []) if s != "exact_enumeration"],
+                      "quantum_enabled": bool(protocols.get("quantum_solvers")),
+                      "quantum_protocol": (protocols.get("quantum_solvers") or [None])[0]},
         "qubo": {"format": encoding.get("format", "upper_triangle_once"), "ratio_penalty_eV": encoding.get("ratio_penalty_eV"),
                  "higher_order": encoding.get("higher_order", "retain_HUBO_or_explicitly_reject")},
         "deduplication": {"key": "topology_id:lexicographically_smallest_symmetry_image",
@@ -452,15 +465,16 @@ def validate_physical_project(spec) -> dict:
         transfers = spec.physical.get("transfer_topologies") or {}
         for model in spec.model_candidates:
             for tid, topo in spec.topologies.items():
+                reason = "known features with an explicit leading constant term are required"
                 try:
                     names = model_features(spec, topo, model)
                 except PipelineError as exc:
-                    names, detail = [], exc.detail
+                    names, reason = [], f"{exc.code}: {exc.detail}"
                 ok = bool(names) and names[0] == "constant" and all(is_known_feature(n) for n in names)
                 checks.append({"check": f"{model['id']}:{tid}:features", "passed": ok})
                 if not ok:
                     errors.append(_err("UNSUPPORTED_FEATURE", f"protocols.model_selection.candidates.{model['id']}",
-                                       f"{tid}: known features with an explicit leading constant term are required"))
+                                       f"{tid}: {reason}"))
                 elif transfers.get(tid) and not all(is_transferable(n) for n in names):
                     # A transfer cell can only test features defined on the parent lattice per formula unit.
                     errors.append(_err("NONTRANSFERABLE_FEATURES", f"protocols.model_selection.candidates.{model['id']}",

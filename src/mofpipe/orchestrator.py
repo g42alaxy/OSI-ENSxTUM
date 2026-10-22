@@ -144,10 +144,11 @@ class Pipeline:
 
     def _stage_encoding(self):
         arts, detail = {}, {}
+        quadratize = self.spec.config["qubo"].get("higher_order") == "quadratize"
         for tid, topo in self.spec.topologies.items():
             ham = self.ctx[f"hamiltonian/{tid}"]
             try:
-                enc = encoding.compile_encoding(self.spec, topo, ham, "QUBO")
+                enc = encoding.compile_encoding(self.spec, topo, ham, "QUBO", quadratize_higher_order=quadratize)
                 qubo_status = {"status": StageStatus.COMPLETED.value}
             except PipelineError as exc:
                 if exc.code != encoding.QUADRATIZATION_REQUIRED:
@@ -158,18 +159,36 @@ class Pipeline:
             verification = encoding.verify_encoding(self.spec, topo, ham, enc)
             arts[f"encoding/{tid}"], arts[f"encoding_verification/{tid}"] = enc, verification
             detail[tid] = {"target": enc["target"], "qubo_compilation": qubo_status,
-                           "n_higher_order_terms": len(enc["higher_order_terms"]),
+                           "n_higher_order_terms": len(enc["higher_order_terms"]), "n_ancillas": len(enc["ancillas"]),
+                           "penalty_certified_by_bound": enc["penalty_bound"]["certified_by_bound"],
                            "verification": verification["status"]}
             if verification["status"] != StageStatus.COMPLETED.value:
                 return StageOutcome(StageStatus.FAILED, arts, {**detail, "error": {"code": "ENCODING_IDENTITY_FAILED", "detail": tid}}, halt=True)
         return StageOutcome(StageStatus.COMPLETED, arts, detail)
 
     def _stage_optimization(self):
-        arts = {}
+        """Exact enumeration feeds the candidate pool; declared cross-check solvers and the QAOA benchmark run on
+        the same frozen Hamiltonian and must agree with it (benchmarks never change the pool)."""
+        from . import qaoa
+        arts, detail = {}, {"cross_checks": {}, "quantum_benchmark": {}}
+        opt = self.spec.config["optimizer"]
         for tid, topo in self.spec.topologies.items():
-            arts[f"solver/{tid}"] = optimization.exact_enumeration(self.spec, topo, self.ctx[f"hamiltonian/{tid}"],
-                                                                   self.ctx[f"encoding/{tid}"])
-        return StageOutcome(StageStatus.COMPLETED, arts, {"quantum": optimization.quantum_solver_status(self.spec)})
+            ham, enc = self.ctx[f"hamiltonian/{tid}"], self.ctx[f"encoding/{tid}"]
+            exact = arts[f"solver/{tid}"] = optimization.exact_enumeration(self.spec, topo, ham, enc)
+            if "branch_and_bound" in opt.get("cross_check_solvers", []):
+                bb = arts[f"solver_bb/{tid}"] = optimization.branch_and_bound(self.spec, topo, ham)
+                agree = Fraction(bb["minimum_energy_exact"]) == Fraction(exact["minimum_energy_exact"])
+                detail["cross_checks"][tid] = {"branch_and_bound": bb["optimality_status"], "agrees_with_exact": agree,
+                                               "nodes": bb["nodes"]}
+                if bb["optimality_status"].startswith("OPTIMAL") and not agree:
+                    return StageOutcome(StageStatus.FAILED, arts, {**detail, "error": {
+                        "code": "SOLVER_DISAGREEMENT", "detail": tid}}, halt=True)
+            if opt.get("quantum_enabled"):
+                bench = arts[f"quantum_benchmark/{tid}"] = qaoa.qaoa_benchmark(self.spec, topo, ham, enc, exact,
+                                                                              opt["quantum_protocol"])
+                detail["quantum_benchmark"][tid] = {"status": bench["status"], **bench["summary"]}
+        detail["quantum"] = optimization.quantum_solver_status(self.spec)
+        return StageOutcome(StageStatus.COMPLETED, arts, detail)
 
     def _stage_candidates(self):
         arts = {}

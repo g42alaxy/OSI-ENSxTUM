@@ -99,7 +99,7 @@ def test_runtime_agents_enabled_blocks_run(tmp_path):
     ({"composition": {"counts": {"A": 7, "B": 6}}}, "INVALID_COMPOSITION_SPEC"),
     ({"topology_screen": {"retain": ["ring12"]}}, "SCREENING_POLICY_EXCLUDES_WITHOUT_EVIDENCE"),
     ({"evaluation": {"dft_enabled": True}}, "UNSUPPORTED_ELECTRONIC_BACKEND"),
-    ({"optimizer": {"quantum_enabled": True}}, "UNSUPPORTED_QUANTUM_BACKEND"),
+    ({"optimizer": {"quantum_enabled": True}}, "SCIENTIFIC_SPEC_MISSING"),
     ({"active_learning": {"max_iterations_if_enabled": 10}}, "UNBOUNDED_ACTIVE_LEARNING"),
     ({"finite_temperature": {"enabled": True}}, "UNSUPPORTED_SCOPE_FINITE_TEMPERATURE"),
 ])

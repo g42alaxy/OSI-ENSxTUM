@@ -1,6 +1,7 @@
 """CLI: python -m mofpipe {run,accept,matrix} --project mof_no_agent_fixture/project.json
 
 ``run`` also accepts a ProjectSpec v0.1 file or a physical_case recipe (physical projects).
+``electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir DIR`` runs Task 07 solvers.
 """
 from __future__ import annotations
 
@@ -44,8 +45,18 @@ def main(argv=None) -> int:
     m = sub.add_parser("matrix", help="run + accept every case x correction mode")
     m.add_argument("--project", required=True)
     m.add_argument("--out", default="runs")
+    e = sub.add_parser("electronic-benchmark", help="active-space export + ED/CASCI/VQE/SQD vs a published value")
+    e.add_argument("--spec", required=True)
+    e.add_argument("--run-dir", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "electronic-benchmark":
+            from .electronic_solvers import run_electronic_benchmark
+            from .store import RunStore
+            report = run_electronic_benchmark(json.loads(Path(args.spec).read_text()), RunStore(args.run_dir))["report"]
+            print(json.dumps({k: report[k] for k in ("benchmark_id", "status", "identical_problem", "comparisons",
+                                                     "solver_status")}, indent=2))
+            return 0 if report["status"] == "REPRODUCED" else 1
         if args.command == "matrix":
             rows = []
             for case in CASES:

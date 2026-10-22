@@ -1,0 +1,21 @@
+{
+  "benchmark_id": "h2_sto3g_szabo_ostlund",
+  "description": "Minimal-basis H2 at R = 1.4 bohr: the textbook model whose SCF and full-CI energies are published in Szabo & Ostlund. A closed-shell (2e, 2o) active space equals the full space, so exact diagonalization must reproduce full CI.",
+  "system": {
+    "system_id": "H2_R1.4bohr", "provenance": "PHYSICAL",
+    "atoms": [["H", 0.0, 0.0, 0.0], ["H", 0.0, 0.0, 1.4]], "unit": "Bohr", "charge": 0, "spin": 0,
+    "geometry_source": "Szabo & Ostlund, Modern Quantum Chemistry (Dover, 1996): minimal-basis H2, R = 1.4 a0",
+    "calculation_id": "molecular_geometry_from_literature"
+  },
+  "protocol": {
+    "protocol_id": "h2_sto3g_rhf_cas22", "basis": "sto-3g", "reference": "RHF",
+    "n_active_electrons": 2, "n_active_orbitals": 2, "embedding": "none", "conv_tol": 1e-12
+  },
+  "solvers": ["exact_diagonalization", "pyscf_casci", "vqe_simulation", "sqd_simulation", "sqd_hardware"],
+  "vqe": {"seed": 0},
+  "sqd": {"shots": 2000, "seeds": [1, 2, 3], "flip_probability": 0.02, "backend": null},
+  "published_reference": {
+    "E_HF_Ha": -1.1167, "E_total_Ha": -1.1373, "tolerance_Ha": 0.0001,
+    "source": "Szabo & Ostlund (1996), minimal-basis H2 at R = 1.4 a0: SCF -1.1167 Eh, full CI -1.1373 Eh (published to 4 decimals)"
+  }
+}
