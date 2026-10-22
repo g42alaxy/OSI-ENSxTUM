@@ -129,7 +129,8 @@ class ReplayClient:
 
 
 class Ledger:
-    """Global LLM request counter for one run: one normal request per role plus the optional extra request."""
+    """Global LLM request counter for one run: one normal request per role call (``initial``, and ``round_k`` for
+    A67/A4 in the k-th optimisation round) plus the single optional extra request (repair, retry or expansion)."""
 
     def __init__(self, path: Path, allow_extra: bool):
         self.path, self.allow_extra = Path(path), allow_extra
@@ -145,8 +146,10 @@ class Ledger:
         return self.allow_extra and not self.extra_used
 
     def reserve(self, role: str, purpose: str) -> str:
-        if purpose == "initial" and role not in self.normal_used:
-            self.normal_used.add(role)
+        slot = (role, purpose)
+        normal = purpose == "initial" or (purpose.startswith("round_") and role in ("A67", "A4"))
+        if normal and slot not in self.normal_used:
+            self.normal_used.add(slot)
             return "normal"
         if self.extra_available:
             self.extra_used = True

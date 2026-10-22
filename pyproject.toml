@@ -24,7 +24,10 @@ gpu = ["gpu4pyscf-cuda12x>=1.8"]
 agents = ["requests>=2.31", "jsonschema>=4.21", "pyyaml>=6", "langgraph>=0.4", "mcp>=1.9", "pypdf>=4",
           "pandas>=2", "pyarrow>=14", "h5py>=3.9", "huggingface_hub>=0.23"]
 # Task 02 ML-potential screening (protocols.ml_potential): orb-v3 conservative (OMat24) + D3(BJ) through ASE.
+# Needs Python <= 3.13 (dm-tree): install into a separate interpreter (README: .venv-mlip) named by protocols.*.python.
 mlip = ["orb-models>=0.7"]
+# Topology generation (protocols.topology_generation): PORMAKE nets, blocks and builder (pulls jax[cpu], pymatgen).
+topology = ["pormake==0.2.3"]
 # T04.3: QAOA sampling on Qiskit fake IBM devices (qpu_worker.py).
 qpu = ["qiskit>=2.0", "qiskit-aer>=0.17", "qiskit-ibm-runtime>=0.40"]
 # T10.1: AiiDA WorkChain engine with stage provenance (local `verdi presto` profile, no services).

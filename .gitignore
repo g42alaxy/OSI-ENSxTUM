@@ -4,7 +4,10 @@ __pycache__/
 *.egg-info/
 runs/
 .venv
+.venv-mlip
+.venv-mlip/**
 .DS_Store
 controls.yaml
 data/reference/
 .aiida/
+runtime.log

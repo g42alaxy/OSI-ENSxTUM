@@ -291,22 +291,31 @@ def select_topologies(spec: ProjectSpec, selected, keep_fingerprint: bool = Fals
     return narrowed
 
 
-AGENT_ROLES = ("A1", "A2", "A67")
-AGENT_REQUEST_CEILINGS = (3, 4)  # three normal requests, plus the single optional repair/expansion request
+AGENT_ROLES = ("A1", "A2", "A67", "A4")  # A4 (optimisation loop) only when optimisation rounds are allowed
+
+
+def agent_request_ceilings(rounds: int) -> tuple:
+    """Normal requests (A1, A2, A67, then A4 and per revision A67 + A4), plus the single optional extra request."""
+    normal = 3 if rounds == 0 else 4 + 2 * rounds
+    return normal, normal + 1
 
 
 def runtime_agent_errors(spec: ProjectSpec) -> list:
-    """Agent policy (MOF_AI_Agent_Implementation_Guide-2 / Task 10): off, or exactly A1/A2/A67 via ``mofpipe agents``."""
+    """Agent policy (MOF_AI_Agent_Implementation_Guide-2 / Task 10): off, or A1/A2/A67(/A4) via ``mofpipe agents``."""
     agents = spec.config.get("runtime_agents", {})
     if agents.get("enabled") is False and agents.get("llm_calls_allowed") is False:
         return [] if spec.agent_plan is None else [("AGENT_PLAN_WITH_AGENTS_DISABLED", "agent_plan is set")]
     errors = []
     if agents.get("enabled") is not True or agents.get("llm_calls_allowed") is not True:
         errors.append(("AGENT_POLICY_INVALID", "enabled and llm_calls_allowed must both be true or both false"))
-    if tuple(agents.get("roles") or ()) != AGENT_ROLES:
-        errors.append(("AGENT_POLICY_INVALID", f"roles must be {list(AGENT_ROLES)}"))
-    if agents.get("max_llm_requests") not in AGENT_REQUEST_CEILINGS:
-        errors.append(("AGENT_POLICY_INVALID", f"max_llm_requests must be one of {AGENT_REQUEST_CEILINGS}"))
+    rounds = agents.get("optimisation_rounds", 0)
+    roles = AGENT_ROLES if rounds else AGENT_ROLES[:3]
+    if type(rounds) is not int or not 0 <= rounds <= 3:
+        errors.append(("AGENT_POLICY_INVALID", "optimisation_rounds must be an integer 0-3"))
+    elif tuple(agents.get("roles") or ()) != roles:
+        errors.append(("AGENT_POLICY_INVALID", f"roles must be {list(roles)}"))
+    elif agents.get("max_llm_requests") not in agent_request_ceilings(rounds):
+        errors.append(("AGENT_POLICY_INVALID", f"max_llm_requests must be one of {agent_request_ceilings(rounds)}"))
     if spec.agent_plan is None:
         errors.append(("AGENT_RUNNER_REQUIRED", "runtime agents run only through `python -m mofpipe agents`"))
     return errors

@@ -16,9 +16,11 @@ DEFAULTS = {
     "openrouter": {
         "api_key": "", "base_url": "https://openrouter.ai/api/v1", "model": "",
         "temperature": 0, "reasoning": None, "provider": {}, "app_url": "", "app_title": "mofpipe-agents",
-        "timeout_s": [10, 120], "deadline_s": 600, "max_tokens": {"A1": 8000, "A2": 32000, "A67": 24000},
+        "timeout_s": [10, 120], "deadline_s": 600, "max_tokens": {"A1": 8000, "A2": 32000, "A67": 24000, "A4": 16000},
     },
-    "budget": {"max_llm_requests": 3, "allow_extra_request": True, "allow_model_expansion": False},
+    # max_llm_requests = normal requests: A1, A2, A67 (+ A4 and, per Hamiltonian revision, A67 + A4 again).
+    "budget": {"max_llm_requests": 6, "allow_extra_request": True, "allow_model_expansion": False,
+               "max_optimisation_rounds": 1},
     "cache": {"enabled": True, "dir": "runs/.agent_cache"},
     "orchestration": {"engine": "auto"},
     "mcp": {"valency": {"enabled": False, "url": "https://mcp.valency.io/", "api_token": "", "timeout_s": 60}},
@@ -55,6 +57,14 @@ class Controls:
         return self.data[key]
 
     @property
+    def optimisation_rounds(self) -> int:
+        return self.data["budget"]["max_optimisation_rounds"]
+
+    @property
+    def roles(self) -> tuple:
+        return ("A1", "A2", "A67", "A4") if self.optimisation_rounds else ("A1", "A2", "A67")
+
+    @property
     def max_llm_requests(self) -> int:
         return self.data["budget"]["max_llm_requests"] + (1 if self.data["budget"]["allow_extra_request"] else 0)
 
@@ -68,21 +78,31 @@ class Controls:
             errs.append(("MISSING_API_KEY", "openrouter.api_key / OPENROUTER_API_KEY"))
         if need_llm and not o["model"]:
             errs.append(("MISSING_MODEL", "openrouter.model / OPENROUTER_MODEL"))
-        if b["max_llm_requests"] != 3 or type(b["allow_extra_request"]) is not bool or type(b["allow_model_expansion"]) is not bool:
-            errs.append(("INVALID_BUDGET", "budget: max_llm_requests is 3 (one per role); allow_extra_request and "
-                                           "allow_model_expansion true/false"))
+        rounds = b.get("max_optimisation_rounds")
+        if type(rounds) is not int or not 0 <= rounds <= 3:
+            errs.append(("INVALID_BUDGET", "budget.max_optimisation_rounds: integer 0-3 (A4 Hamiltonian revisions)"))
+        elif b["max_llm_requests"] != normal_requests(rounds) or type(b["allow_extra_request"]) is not bool \
+                or type(b["allow_model_expansion"]) is not bool:
+            errs.append(("INVALID_BUDGET", f"budget: max_llm_requests is {normal_requests(rounds)} for "
+                                           f"max_optimisation_rounds={rounds} (one request per role call); "
+                                           "allow_extra_request and allow_model_expansion true/false"))
         for d in self.data["datasets"]:
             needed = ("index", "hdf5") if d.get("format") == "materials_toolkits" else ("path",)
             if d.get("format") not in ("materials_toolkits", "table") or not d.get("id") or not all(d.get(k) for k in needed):
                 errs.append(("INVALID_DATASET", f"datasets[{d.get('id')}]: format materials_toolkits (index, hdf5) or table (path)"))
-        if set(o["max_tokens"]) != {"A1", "A2", "A67"} or not all(type(v) is int and v > 0 for v in o["max_tokens"].values()):
-            errs.append(("INVALID_MAX_TOKENS", "openrouter.max_tokens needs positive integers for A1, A2, A67"))
+        if not {"A1", "A2", "A67", "A4"} <= set(o["max_tokens"]) or not all(type(v) is int and v > 0 for v in o["max_tokens"].values()):
+            errs.append(("INVALID_MAX_TOKENS", "openrouter.max_tokens needs positive integers for A1, A2, A67, A4"))
         if self.data["orchestration"]["engine"] not in ENGINES:
             errs.append(("INVALID_ENGINE", f"orchestration.engine must be one of {ENGINES}"))
         valency = self.data["mcp"]["valency"]
         if valency["enabled"] and not valency["api_token"]:
             errs.append(("MISSING_VALENCY_TOKEN", "mcp.valency.api_token / VALENCY_API_TOKEN"))
         return errs
+
+
+def normal_requests(rounds: int) -> int:
+    """A1 + A2 + A67, then A4 after every assessment and A67 + A4 again per executed Hamiltonian revision."""
+    return 3 if rounds == 0 else 4 + 2 * rounds
 
 
 def load_controls(path=None, overrides: dict | None = None) -> Controls:

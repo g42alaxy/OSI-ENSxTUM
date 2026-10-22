@@ -68,12 +68,16 @@ def _composition_feasible(spec, topo) -> bool:
 def construction_options(spec) -> list:
     """Precomputed legal options: one validated working cell per candidate topology in this build.
 
-    #TODO: Task 01 — several options per framework (PORMAKE/ToBaCCo mappings, supercells, orientation templates).
+    #TODO: Task 01 — several options per framework (alternative supercells, orientation templates).
     """
     physical = spec.physical or {}
     backend = (((physical.get("protocols") or {}).get("builder") or {}).get("builder_id")
                if physical else "synthetic_occupation_graph")
+    generated = {a["net"]: a for a in ((physical.get("topology_generation") or {}).get("accepted") or [])}
     return [{"construction_plan_id": f"{tid}_plan_0", "framework_id": tid, "backend_id": backend,
+             "framework_source": (f"{physical['topology_generation']['builder']}:{tid}" if tid in generated
+                                  else "supplied_cif" if physical else "fixture_graph"),
+             "node_fit_rmsd_A": generated[tid]["max_node_rmsd_A"] if tid in generated else None,
              "supercell": list(topo.supercell) or None, "n_substitution_sites": topo.n_sites,
              "species_counts": _counts(composition_of(spec, topo)), "orientation_template_id": "none",
              "constraint_policy_id": constraint_policy_id(spec, topo),
@@ -108,7 +112,22 @@ def build_a1_packet(spec, run_id: str, design_brief: str, allow_scope_exclusions
         "construction_options": options,
         "backend_options": sorted({o["backend_id"] for o in options if o["backend_id"]}),
         "constraints": constraints,
+        "topology_search": _topology_search(spec),
     })
+
+
+def _topology_search(spec):
+    """How the catalogue was generated (topology builder) and which nets were rejected by code, with reasons."""
+    gen = (spec.physical or {}).get("topology_generation")
+    if not gen:
+        return None
+    return {"builder": gen["builder"], "versions": gen["versions"], "selection_rule": gen["selection_rule"],
+            "n_nets_considered": gen["n_nets_considered"],
+            "accepted": [{k: a.get(k) for k in ("net", "max_node_rmsd_A", "n_nodes", "n_edges", "n_substitution_sites")}
+                         for a in gen["accepted"]],
+            "rejected_by_code": [{k: r.get(k) for k in ("net", "reason", "max_node_rmsd_A", "count")}
+                                 for r in gen["rejected"]][:40],
+            "note": "builder output is idealised and unrelaxed; the ML-potential screen ranks the selected nets next"}
 
 
 def _feature_catalogue(spec, topologies) -> list:
@@ -283,4 +302,78 @@ def build_a67_packet(spec, report: dict, pipeline_dir, evidence: dict, run_id: s
         "coverage": {"not_executed": report.get("not_executed"), "retrieval_gaps": evidence["gaps"],
                      "dataset_gaps": datasets["gaps"],
                      "required_checks": list(required_checks)},
+    })
+
+
+# -- A4 (optimisation) ----------------------------------------------------------------------------------------
+RANK_AGREEMENT_MIN = 0.5  # Spearman correlation below this between surrogate and evaluated energies = disagreement
+
+
+def _spearman(a: list, b: list):
+    from ..configuration_model import spearman
+    return spearman(a, b) if len(a) >= 3 else None
+
+
+def candidate_quality(spec, report: dict, pipeline_dir, assessment: dict | None) -> dict:
+    """Code-computed facts on whether the fitted Hamiltonian ranked the evaluated candidates correctly."""
+    rows = report.get("base_ranking") or []
+    if spec.physical:
+        tol = float(spec.physical["tolerances"]["target_relative_energy_tolerance"])
+    else:
+        tol = float(spec.config["model_selection"]["max_development_rmse_eV"])
+    per = {}
+    for tid in sorted({r["topology_id"] for r in rows}):
+        mine = [r for r in rows if r["topology_id"] == tid and r.get("surrogate_base_energy_eV") is not None]
+        if not mine:
+            continue
+        sur = [r["surrogate_base_energy_eV"] for r in mine]
+        ev = [r["ranking_energy_eV"] for r in mine]
+        s_best = min(range(len(mine)), key=lambda i: (sur[i], i))
+        per[tid] = {"n_evaluated": len(mine), "spearman_surrogate_vs_evaluated": _spearman(sur, ev),
+                    "max_abs_surrogate_error_eV": max(abs(x - y) for x, y in zip(sur, ev)),
+                    "surrogate_best": mine[s_best]["configuration_id"],
+                    "evaluated_best": mine[min(range(len(mine)), key=lambda i: (ev[i], i))]["configuration_id"],
+                    "surrogate_best_is_evaluated_best_within_tolerance": ev[s_best] <= min(ev) + tol}
+    selections = fit_diagnostics(report, pipeline_dir)
+    candidates = (assessment or {}).get("candidates") or []
+    facts = {
+        "surrogate_ranking_disagrees_with_dft": any(p["spearman_surrogate_vs_evaluated"] is not None
+                                                    and p["spearman_surrogate_vs_evaluated"] < RANK_AGREEMENT_MIN
+                                                    for p in per.values()),
+        "surrogate_error_above_tolerance": any(p["max_abs_surrogate_error_eV"] > tol for p in per.values()),
+        "surrogate_best_not_dft_best": any(not p["surrogate_best_is_evaluated_best_within_tolerance"] for p in per.values()),
+        "model_inadequate": any(s["status"] == "MODEL_INADEQUATE" for s in selections.values())
+                            or ((report.get("stage_detail") or {}).get("model_selection") or {}).get("error", {}).get("code")
+                            == "MODEL_INADEQUATE",
+        "structural_check_failed": any(c.get("structural_verdict") == "FAIL" for c in candidates),
+        "assessment_incomplete": (assessment or {}).get("status") != "COMPLETE",
+        "no_evaluated_candidates": not per,
+    }
+    return {"facts": facts, "per_topology": per, "tolerance_eV": tol, "rank_agreement_min": RANK_AGREEMENT_MIN,
+            "evaluated_level": "periodic DFT (base)" if spec.physical else "synthetic evaluator (base)",
+            "note": "surrogate = the fitted occupation Hamiltonian; evaluated = expensive energies of the same candidates"}
+
+
+def build_a4_packet(spec, setup: dict, report: dict, pipeline_dir, assessment: dict | None, grid: dict,
+                    history: list, run_id: str, round_index: int, max_rounds: int, screening: dict | None = None) -> dict:
+    """The optimisation checkpoint after an assessment: facts, fit results and the Hamiltonian options A2 had."""
+    options = build_a2_packet(spec, setup, run_id, screening=screening)
+    quality = candidate_quality(spec, report, pipeline_dir, assessment)
+    tried = {t: sorted({m for g in history for m in g.get(t, [])}) for t in grid}
+    catalogue = [m["model_id"] for m in options["model_catalogue"]]
+    quality["facts"]["untried_models_available"] = any(set(catalogue) - set(ids) for ids in tried.values())
+    return _finish({
+        "run_id": run_id, "schema_version": CONTRACT_VERSION, "mode": mode_of(spec), "role": "A4",
+        "round": round_index, "max_rounds": max_rounds, "rounds_left": max_rounds - round_index,
+        "current_model_grid": grid, "grid_history": history, "tried_models": tried,
+        "candidate_quality": quality, "fit_results": fit_diagnostics(report, pipeline_dir),
+        "assessment": {"status": (assessment or {}).get("status"), "unresolved_codes": (assessment or {}).get("unresolved_codes"),
+                       "candidates": [{k: c.get(k) for k in ("candidate_id", "structural_verdict", "issue_codes")}
+                                      for c in (assessment or {}).get("candidates") or []]},
+        "pipeline": {"status": report.get("pipeline_status"),
+                     "stage_status": {k: v for k, v in (report.get("stage_status") or {}).items()
+                                      if k in ("model_selection", "encoding", "optimization", "evaluation", "ranking")}},
+        "hamiltonian_options": {k: options[k] for k in ("topologies", "composition_constraints", "feature_catalogue",
+                                                         "model_catalogue", "encoding_catalogue", "compilation_options",
+                                                         "limits")},
     })

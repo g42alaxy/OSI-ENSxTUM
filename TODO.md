@@ -7,6 +7,15 @@ This file explains every `#TODO` marker in `src/mofpipe/`. The pipeline runs end
   - Milestone C adds several topologies, transferable cluster features, supercell transfer checks, acquisition and refinement, relaxed-geometry dedup, references, validation and the report.
   - Milestone D adds quadratization, sublattice constraints, branch and bound, a QAOA simulation benchmark, active-space export and ED/CASCI/VQE/SQD solvers.
   - Milestone E adds the finite-cluster subtractive embedding: corrected-energy assembly, scheme validation and a corrected ranking next to the DFT one.
+  - Milestone F adds ML screening, fake-device QPU sampling, the AiiDA engine and the runtime agents (A1/A2/A67).
+  - After F (this update, uncommitted until reviewed):
+    - topology generation with PORMAKE (`protocols.topology_generation`);
+    - an exploratory ML prioritisation opt-in;
+    - a drop-instead-of-halt policy for topologies no model can fit;
+    - SQD as an embedding high level, with declared SCF numerics for transition-metal clusters;
+    - the A4 optimisation role (in progress).
+
+    The MOF-5 scheme project is `tests/mof5_scheme.py`; environment setup is in the README, "Installation on a new machine".
 
 Periodic DFT runs through PySCF (GPW, CPU/GPU) or a Quantum ESPRESSO adapter. Physical results so far come from SYNTHETIC toys (`tests/toy_framework.py` with a mock `pw.x`; `tests/pyscf_toy.py` with real PySCF). Real MOF-5 runs still need the inputs listed under **Needs**.
 
@@ -30,7 +39,7 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 |---|---|---|---|---|
 | T01.1 | 01 | Full ProjectSpec and physical-case loader | — | **Done (B, C: several topologies)** |
 | T01.2 | 01 | CIF / periodic-net input mode | — | **Done (B)** |
-| T01.3 | 01 | Atomic framework construction | [framework.py:571](src/mofpipe/framework.py#L571) | **Done (B)**; PORMAKE wiring open |
+| T01.3 | 01 | Atomic framework construction | [framework.py:571](src/mofpipe/framework.py#L571), [topology_builders.py](src/mofpipe/topology_builders.py) | **Done (B)**; **PORMAKE topology generation done (post-F)**; ToBaCCo, per-slot PORMAKE assembly open |
 | T01.4 | 01 | Linker orientation states | [structures.py:77](src/mofpipe/structures.py#L77) | open |
 | T01.5 | 01/05 | Supercells and periodic translations | [structures.py:91](src/mofpipe/structures.py#L91) | **Done (C)** for diagonal supercells; non-diagonal open |
 | T02.1 | 02 | Seed decoration generation | [screening.py](src/mofpipe/screening.py) | **Done (F)**; orientation diversity needs T01.4 |
@@ -99,10 +108,31 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Output `Geometry` record: lattice, coordinates, atom→block→slot map, slot adjacency, inventory, ordered and order-independent geometry hashes, and an exported P1 CIF.
   - Early sanity checks give `BuildFailure` records (`ATOM_OVERLAP`, `INVENTORY_MISMATCH`, `CONNECTIVITY_CHANGED`, `NO_CONSTRUCTION_RULE`), never energies. The connectivity check maps the built structure back onto the parent slots and nodes (`map_to_parent_slots`).
   - The structures stage rebuilds the known parent and requires an identical canonical geometry hash. It also builds one legal decoration. Tests build every symmetry-distinct legal decoration and check its counts.
+- **Topology generation with PORMAKE (post-F)** — `topology_builders.py`, `pormake_worker.py`, CLI `mofpipe generate-topologies`:
+  - **Declaration and wiring.** `protocols.topology_generation` replaces `source_structures` (declaring both is `TOPOLOGY_SOURCE_CONFLICT`). The loader runs generation before validation; accepted nets become source structures with their own `supercell_matrices`, so everything downstream treats them like supplied CIFs.
+  - **Worker.** Runs PORMAKE 0.2.3 in the declared interpreter:
+    - net search: a `.cgd` connectivity pre-filter, then `Locator` RMSD of the node block on every unique node, limited by `max_node_rmsd_A` and `max_nodes_per_cell`;
+    - `Builder.build_by_type` with the node block on every node type and the parent edge block on every edge type, written as a P1 CIF;
+    - substituent frame coordinates derived from a declared PORMAKE edge block (e.g. `E72` for NH₂). It refuses blocks whose root atom is on the connection path, e.g. the –NH– bridge `E201`.
+  - **Main-process checks for each built net:**
+    - smallest diagonal supercell with integral composition within [min, max] slots;
+    - the ordinary slot-lattice checks;
+    - a build with every slot substituted (catches substituent clashes in strained nets).
+
+    Failing nets are rejected with a reason and never repaired.
+  - **Cache.** Results go to `<project>/generated/<key>/`, keyed by protocol, blocks, composition and worker hash. The report (accepted/rejected, versions, selection rule) is in `spec.physical["topology_generation"]` and is shown to A1 as `topology_search`.
+  - **MOF-5 result** (Zn₄O `N16` + p-phenylene `E14`, NH₂ from `E72`, automatic scan):
+    - accepted: `pcu` (RMSD 0, 2×2×1, 12 slots) and `bsn` (RMSD 0.206 Å, 12 slots);
+    - rejected: `snp` (substituent overlap 0.15 Å), `sxb` (ambiguous amino anchor), `kag`/`sxc` (9 slots per cell), `acs` (RMSD 0.42 Å), `btu` (beyond `max_candidates`), plus connectivity/size rejections and four unreadable `.cgd` files.
+  - **Interpreters.** Uses `.venv` (pormake, jax, pymatgen); orb-v3 needs a separate Python ≤ 3.13 environment `.venv-mlip`. See the README, "Installation on a new machine".
+  - **Not yet:** automated tests for generation, and the full ML screen of the generated nets (an orb-v3 run was in progress when this was written).
 - **To do:**
-  - Wire PORMAKE (`PormakeBuilder` currently returns `BUILDER_UNAVAILABLE` / `BUILDER_NOT_VERIFIED`) after verifying the installed API and block database. Put ToBaCCo behind the same adapter.
+  - ToBaCCo (refused as `UNSUPPORTED_TOPOLOGY_BUILDER`: not an installable package; needs a pinned checkout behind the same interface).
+  - Per-decoration PORMAKE assembly (`PormakeBuilder`, an edge block per slot) instead of parent substitution.
+  - Mixed node blocks or several edge types per net; non-diagonal supercells.
+  - Point-group symmetry for generated nets. They keep translations only, which is consistent with the substituent orientation convention (T01.4).
   - Orientation states as search variables (T01.4).
-- **Needs:** Validated 3D building blocks with attachment points, or a substitution rule per functionalised linker. The SMILES in `recipe.json` are not enough.
+- **Needs:** Validated 3D building blocks with attachment points, or a substitution rule per functionalised linker. The SMILES in `recipe.json` are not enough; PORMAKE's block library now supplies both for the MOF-5 case.
 
 ### T01.4 Linker orientation states
 - **Where:** `structures.make_decoration`
@@ -156,6 +186,12 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
     - `reinstate` brings a topology back. The audit sample is the excluded topologies' seed results.
   - Later stages see only kept topologies.
   - Tested with consistent mock ML/DFT oracles: deprioritised when the gap is real. When calibration fails or relaxations fail, every topology survives.
+- **Post-F:** `screening.energetic_policy.allow_exploratory: true` is an explicit opt-in to deprioritise on the *uncalibrated* ML gap. It applies only when every seed relaxed and there are no domain flags. The decision is labelled `EXPLORATORY_ML_GAP`, stays in the audit sample and can be reinstated; without the opt-in, behaviour is unchanged.
+  - First real numbers on PORMAKE frameworks (orb-v3-conservative-20-omat + D3(BJ), 150 FIRE steps, not converged):
+    - `pcu` −1521.79 eV per cell;
+    - `bsn` −1519.90 eV (gap about 0.95 eV/f.u., still relaxing).
+
+    About 1 s per step for 224 atoms on a laptop CPU.
 - **To do:** A real-DFT calibration of orb on the MOF-5 BDC/NH₂-BDC case (needs the Milestone B inputs).
 
 ## Task 03 — Configurational Hamiltonians and encodings
@@ -182,6 +218,13 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Metrics: CV RMSE and max error, tie-aware low-energy recall at `tolerances.low_energy_validation_criterion.k`, Spearman rank correlation, and recovery of the lowest labelled state. Pass = CV RMSE ≤ `target_relative_energy_tolerance` and recall ≥ `min_recall`. Selection takes the fewest effective parameters, then the lowest CV RMSE, then the model ID. No passing model gives `MODEL_INADEQUATE` with recorded data requirements.
   - The ranking uses tolerance-equivalence ties (`tie_tolerance`) instead of exact equality.
 - **Still open:** nested CV for hyper-parameters (alpha is fixed by the protocol); larger-supercell transfer metric (needs T01.5); ground-state recovery over all states (only over the labelled set).
+- **Post-F:** `protocols.model_selection.on_inadequate: drop_topology` (default `halt`).
+  - A topology no catalogue model fits leaves the search with its selection report, and later stages see the rest. The stage is `INCOMPLETE`, so the pipeline is never reported as covering every topology.
+  - It needs at least one fitted topology, otherwise the run halts as before.
+  - On PORMAKE MOF-5 with the mock `pw.x`:
+    - the fixed features (`unlike_distance_1/2`, `BBB_paths`) miss tolerance (CV RMSE about 25 meV/f.u.) because the mock energy depends on which linker end carries NH₂;
+    - the translation-symmetric pair-orbit model (`point_orbits` + `pairs<=9.5`) fits `pcu` with CV RMSE 0.05 meV/f.u.;
+    - it is rank-deficient on the 1×1×1 `bsn` cell (28 parameters), so `bsn` is dropped.
 - **Needs:** The real model-selection policy and physical accuracy tolerance. The toy's 5 meV per formula unit is a test value.
 
 ### T03.3 Uncertainty and multifidelity
@@ -339,6 +382,13 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
 - **Published benchmark:** `benchmarks/h2_sto3g_szabo_ostlund.json`, minimal-basis H₂ at R = 1.4 a₀. HF is −1.11671 Ha against the published −1.1167, and full CI −1.13728 against −1.1373, within the published 4-decimal precision. ED, CASCI, VQE and SQD agree. Status `REPRODUCED`; this is reproduction of a calculation, not agreement with experiment.
 - **Still open:** hardware SQD adapter ([electronic_solvers.py:237](src/mofpipe/electronic_solvers.py#L237)); benchmarks with strong correlation (open-shell Fe–MOF-74); approximate references (DMRG, SHCI) for larger spaces.
 
+- **Post-F, the ground-state step of the OSI scheme:**
+  - `protocols.embedding.high_level.solver: sqd_simulation` runs the simulated VQE on the cluster active space and samples SQD from that VQE state. The SQD energy is the level energy; the VQE energy, exact ED (≤ 8 orbitals), mean-field energy and SQD subspace size are recorded in the cluster result.
+  - Unknown solver names are refused at intake. A failed reference SCF is a typed failure, not a worker crash. The cluster worker is now version 3.
+  - Declared SCF numerics per level (`scf_solver: diis | newton`, `max_cycle`, `level_shift_Ha`) and for the active-space reference (`scf_solver`, `max_cycle`). They are part of the embedding fidelity.
+  - Reason: on the PORMAKE MOF-5 node cluster Zn₄O(HCO₂)₆ (STO-3G, 173 AOs), DIIS did not converge, even with level shift and 200 cycles; second-order SCF converged in about 60 s.
+  - Full MOF-5 VQE/SQD run: in progress when this was written.
+
 ### T07.3 Corrected-energy assembly — done for the finite-cluster subtractive scheme (Milestone E)
 - **Where:** `embedding.py` (`plan_regions`, `cut_region`, `ClusterBackend`, `assemble_corrected_energy`, `validate_scheme`, `correct_pool`, `run_embedding_benchmark`), `cluster_worker.py`; the `embedding` stage between `evaluation` and `ranking`; CLI `python -m mofpipe embedding-benchmark`.
 - **Scheme** (`protocols.embedding.scheme: finite_cluster_subtractive`, labelled a finite-cluster mechanical embedding, not WF-in-DFT). The frozen expression is stored in every plan, correction and validation record:
@@ -449,7 +499,20 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
   - `agents-eval` compares agent-assisted with deterministic runs (Milestone F).
   - The A2 model-family expansion exists but is off by default.
 - **To do:**
-  - Several construction options per framework once PORMAKE/ToBaCCo exist (T01.3). A1 now chooses among validated working cells only and cannot add nets.
+  - Several construction options per framework (alternative cells/orientations). A1's catalogue can now be generated by PORMAKE (`topology_search` in its packet), but A1 still cannot request nets outside it.
+  - **A4 optimisation role (post-F, in progress):**
+    - code: `contracts.A4_SCHEMA`, `packets.build_a4_packet` / `candidate_quality`, `validate.validate_optimisation`, `runner.node_a4`;
+    - budget: `budget.max_optimisation_rounds`; `max_llm_requests` = 3 without A4, otherwise 4 + 2 × rounds;
+    - Ledger slots `round_k` and the gateway role A4;
+    - scripted stand-ins and the scheme trace in `agents/scheme.py`.
+
+    Validated once on the fixture with scripted answers (MODEL_INADEQUATE → revised to the triplet model → accepted, 6 requests).
+
+    The existing agent tests now pin `max_optimisation_rounds: 0`. Still to do:
+    - A4 tests;
+    - `--scripted` CLI wiring;
+    - the scheme trace in the run summary;
+    - a live LLM run.
   - Split the pipeline before A2 once a real screening stage exists (T02.3).
   - A live physical run, which needs the MOF-5 inputs.
   - Full-text retrieval for Valency hits (abstract-only now).
@@ -492,9 +555,17 @@ Following the milestones in `instructions/10_AGENT_ARCHITECTURE.md`. Milestones 
 - B: T01.1–T01.3, T06.1, T06.2, T03.2;
 - C: T01.5, T03.1, T05.1, T05.2, T08.1, T08.2, T09.1 (in-house + optional tools), T09.2 (pure endpoints), plus the PySCF engine.
 
-They are verified on SYNTHETIC toys. Running MOF-5 BDC/NH₂-BDC needs: the verified CIF, a substitution rule or 3D blocks, a converged DFT protocol (basis/cutoff/k-points for PySCF), tolerances and budgets. T02.1–T02.3 (ML screening) were skipped: no ML potential was chosen.
+They are verified on SYNTHETIC toys. Running MOF-5 BDC/NH₂-BDC needs: the verified CIF, a substitution rule or 3D blocks, a converged DFT protocol (basis/cutoff/k-points for PySCF), tolerances and budgets. T02.1–T02.3 (ML screening) were done in Milestone F (orb-v3).
+
+After F, PORMAKE now supplies the frameworks and the amino geometry. Real MOF-5 periodic energies remain the gap: a 200-atom cell is beyond laptop DFT, so `tests/mof5_scheme.py` uses the mock `pw.x` and is labelled SYNTHETIC.
 
 1. **Before real runs:** T06.3 (GPU validation on a CUDA host), Gaussian-basis and k-point convergence studies, non-diagonal supercells if the MOF-5 primitive/conventional relation needs them.
 2. **Milestone D — done:** T03.4 (cubic quadratization), T03.5 (sublattice constraints, penalty bound, one-hot at the encoding layer), T04.1 (branch and bound), T04.2 (QAOA simulation benchmark), T07.1–T07.2 (active-space export and ED/CASCI/VQE/SQD, H₂/STO-3G published benchmark reproduced).
 3. **Milestone E — done:** T07.3 for the finite-cluster subtractive scheme (assembly, validation, corrected ranking), checked against an independent full-CCSD benchmark. Still open: the published Fe–MOF-74 reference and WF-in-DFT.
 4. **Milestone F — done in software:** T10.1 (AiiDA engine, optimistic commits), T10.2 (agents), T04.3 (fake-device QPU), T02.1–T02.3 (ML screening), T09.3 (A67 literature/dataset review, agent ablation). Open: HPC CalcJobs, real QPU devices, paper reproductions.
+5. **After F, OSI scheme (OSI_scheme.pdf), in progress:**
+   - **Done:** PORMAKE topology generation (T01.3); exploratory ML prioritisation opt-in (T02.3); `model_selection.on_inadequate: drop_topology` (T03.2); SQD high level and declared SCF numerics for the cluster embedding (T07); the A4 optimisation loop (T10.2, fixture-validated).
+   - **Next:**
+     - tests for generation and A4;
+     - finish the orb screen and the full MOF-5 scheme run (scripted roles), then a live LLM run;
+     - ToBaCCo.

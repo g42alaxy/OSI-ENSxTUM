@@ -59,6 +59,13 @@ class Pipeline:
         if retained is not None and set(retained) != set(self.spec.topologies) and retained:
             self.spec = select_topologies(self.spec, retained, keep_fingerprint=True)
 
+    def _apply_model_drops(self) -> None:
+        """Policy on_inadequate=drop_topology: later stages see only topologies with a selected Hamiltonian."""
+        dropped = (self.detail.get("model_selection") or {}).get("dropped_topologies") or []
+        keep = [t for t in self.spec.topologies if t not in dropped]
+        if dropped and keep:
+            self.spec = select_topologies(self.spec, keep, keep_fingerprint=True)
+
     def run(self, stop_after: str | None = None) -> dict:
         """All stages, or up to ``stop_after`` (then the stage status and that stage's committed artifacts)."""
         upstream = self.spec.fingerprint
@@ -79,6 +86,8 @@ class Pipeline:
                 upstream = content_hash({"prev": fingerprint, "ids": previous["artifact_ids"]})
                 if name == "screening":
                     self._apply_screening()
+                if name == "model_selection":
+                    self._apply_model_drops()
                 if name == stop_after:
                     break
                 continue
@@ -97,6 +106,8 @@ class Pipeline:
             upstream = content_hash({"prev": fingerprint, "ids": ids})
             if name == "screening":
                 self._apply_screening()
+            if name == "model_selection":
+                self._apply_model_drops()
             if name == stop_after:
                 break
         if stop_after:
@@ -557,6 +568,13 @@ class Pipeline:
             tol = Fraction(str(self.spec.physical["tolerances"]["target_relative_energy_tolerance"]))
             best = min(range(len(entries)), key=lambda i: (preds[i], i))
             detail.setdefault("labelled_ground_state_recovered", {})[tid] = labels[best] <= min(labels) + tol
+        policy = (self.spec.physical["protocols"].get("model_selection") or {}).get("on_inadequate", "halt")
+        fitted = [t for t in self.spec.topologies if t not in {f["topology_id"] for f in failed}]
+        if failed and policy == "drop_topology" and fitted:
+            # The failing topologies leave the search with their reports; the ranking can no longer cover every
+            # candidate topology, so the stage (and the pipeline) is INCOMPLETE, never COMPLETED.
+            return StageOutcome(StageStatus.INCOMPLETE, arts, {**detail, "dropped_topologies": sorted(f["topology_id"] for f in failed),
+                                                                "failures": failed, "on_inadequate": policy})
         if failed:
             return StageOutcome(StageStatus.FAILED, arts, {**detail, "error": {"code": failed[0]["code"], "detail": failed}},
                                 halt=True)

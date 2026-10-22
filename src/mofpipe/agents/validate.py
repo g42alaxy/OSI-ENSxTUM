@@ -2,6 +2,7 @@
 
 validate_setup(proposal, packet) -> ValidatedSetup
 validate_hamiltonian_proposal(proposal, packet) -> ValidatedModelGrid
+validate_optimisation(proposal, packet) -> ValidatedRevision (A4)
 validate_assessment(assessment, packet) -> AssessmentValidation
 render_assessment(assessment, packet) -> Markdown with verified citations
 
@@ -93,21 +94,16 @@ def validate_setup(proposal: dict, packet: dict) -> dict:
                    excluded=sorted(proposal["excluded"], key=lambda e: order(e["framework_id"])))
 
 
-def validate_hamiltonian_proposal(proposal: dict, packet: dict) -> dict:
-    stop = _error_state(proposal)
-    if stop:
-        return stop
-    errors = []
-    _ok_without_errors(proposal, errors)
-    topologies = {t["topology_id"]: t for t in packet["topologies"]}
-    _coverage([r["topology_id"] for r in proposal["topologies"]], list(topologies), "TOPOLOGY", errors)
-    encodings = {e["encoding_id"] for e in packet["encoding_catalogue"]}
-    models = {m["model_id"]: m for m in packet["model_catalogue"]}
-    compilers = {c["compiler_id"]: c for c in packet["compilation_options"]}
-    limit = packet["limits"]["max_models_per_topology"]
-    expansion = packet.get("expansion_request") or {}
+def _check_model_rows(rows: list, options: dict, errors: list, expansion: dict | None = None) -> dict:
+    """Per-row Hamiltonian checks shared by A2 and A4; returns {topology_id: [model ids]} for known topologies."""
+    topologies = {t["topology_id"]: t for t in options["topologies"]}
+    encodings = {e["encoding_id"] for e in options["encoding_catalogue"]}
+    models = {m["model_id"]: m for m in options["model_catalogue"]}
+    compilers = {c["compiler_id"]: c for c in options["compilation_options"]}
+    limit = options["limits"]["max_models_per_topology"]
+    expansion = expansion or {}
     grid = {}
-    for row in proposal["topologies"]:
+    for row in rows:
         tid = row["topology_id"]
         if tid not in topologies:
             continue
@@ -132,9 +128,66 @@ def validate_hamiltonian_proposal(proposal: dict, packet: dict) -> dict:
         if tid in expansion.get("failed_topologies", []) and set(ids) <= set(expansion["tried_model_ids"].get(tid, [])):
             errors.append({"code": "EXPANSION_WITHOUT_UNTRIED_MODEL", "detail": f"{tid}: {ids}"})
         grid[tid] = list(ids)
+    return grid
+
+
+def validate_hamiltonian_proposal(proposal: dict, packet: dict) -> dict:
+    stop = _error_state(proposal)
+    if stop:
+        return stop
+    errors = []
+    _ok_without_errors(proposal, errors)
+    _coverage([r["topology_id"] for r in proposal["topologies"]], [t["topology_id"] for t in packet["topologies"]],
+              "TOPOLOGY", errors)
+    grid = _check_model_rows(proposal["topologies"], packet, errors, packet.get("expansion_request"))
     rows = [{k: r[k] for k in ("topology_id", "encoding_id", "candidate_model_ids", "compiler_id", "constraint_policy_id")}
             for r in proposal["topologies"]]
     return _result(errors, model_grid=grid, rows=rows)
+
+
+# Factual A4 reasons and the candidate_quality fact each one needs.
+A4_FACT_REASONS = {"SURROGATE_RANKING_DISAGREES_WITH_DFT": "surrogate_ranking_disagrees_with_dft",
+                   "SURROGATE_ERROR_ABOVE_TOLERANCE": "surrogate_error_above_tolerance",
+                   "SURROGATE_BEST_NOT_DFT_BEST": "surrogate_best_not_dft_best",
+                   "MODEL_INADEQUATE": "model_inadequate", "STRUCTURAL_CHECK_FAILED": "structural_check_failed",
+                   "ASSESSMENT_INCOMPLETE": "assessment_incomplete"}
+DISAGREEMENT_FACTS = ("surrogate_ranking_disagrees_with_dft", "surrogate_error_above_tolerance",
+                      "surrogate_best_not_dft_best", "model_inadequate")
+
+
+def validate_optimisation(proposal: dict, packet: dict) -> dict:
+    """A4: reasons must match the code facts; a revision must be a new, executable, catalogue-valid grid."""
+    errors = []
+    facts = packet["candidate_quality"]["facts"]
+    for reason in proposal["reason_codes"]:
+        fact = A4_FACT_REASONS.get(reason)
+        if fact and not facts.get(fact):
+            errors.append({"code": "REASON_CONTRADICTS_FACTS", "detail": f"{reason}: {fact} is false"})
+    if "CANDIDATES_CONSISTENT" in proposal["reason_codes"] and any(facts.get(f) for f in DISAGREEMENT_FACTS):
+        errors.append({"code": "REASON_CONTRADICTS_FACTS",
+                       "detail": "CANDIDATES_CONSISTENT with " + ", ".join(f for f in DISAGREEMENT_FACTS if facts.get(f))})
+    if "NO_UNTRIED_MODEL" in proposal["reason_codes"] and facts.get("untried_models_available"):
+        errors.append({"code": "REASON_CONTRADICTS_FACTS", "detail": "NO_UNTRIED_MODEL but untried catalogue models remain"})
+    if proposal["error_codes"] or proposal["missing_input_ids"]:
+        errors.append({"code": "UNEXPECTED_ERROR_STATE", "detail": str(proposal["error_codes"] + proposal["missing_input_ids"])})
+    current, grid = packet["current_model_grid"], dict(packet["current_model_grid"])
+    if proposal["decision"] == "ACCEPT":
+        if proposal["topologies"]:
+            errors.append({"code": "ACCEPT_WITH_REVISION_ROWS", "detail": str([r["topology_id"] for r in proposal["topologies"]])})
+        return _result(errors, decision="ACCEPT", model_grid=current, executable=False)
+    if not proposal["topologies"]:
+        errors.append({"code": "REVISION_WITHOUT_ROWS", "detail": "REVISE_HAMILTONIAN needs at least one topology row"})
+    ids = [r["topology_id"] for r in proposal["topologies"]]
+    for tid in sorted({i for i in ids if ids.count(i) > 1}):
+        errors.append({"code": "DUPLICATE_TOPOLOGY", "detail": tid})
+    for tid in sorted(set(ids) - set(current)):
+        errors.append({"code": "UNKNOWN_TOPOLOGY", "detail": tid})
+    grid.update(_check_model_rows(proposal["topologies"], packet["hamiltonian_options"], errors))
+    if any(grid == {t: list(g.get(t, [])) for t in grid} for g in packet["grid_history"]):
+        errors.append({"code": "REVISION_REPEATS_A_TRIED_GRID", "detail": str(grid)})
+    executable = packet["rounds_left"] > 0
+    return _result(errors, decision="REVISE_HAMILTONIAN", model_grid=grid, executable=executable,
+                   changed_topologies=sorted(t for t in grid if grid[t] != current.get(t)))
 
 
 def _allowed_verdicts(mode: str, checks: list) -> set:

@@ -60,6 +60,9 @@ def prepare_active_space(system: dict, protocol: dict) -> dict:
     with lib.with_omp_threads(1):
         mf = (scf.RHF if protocol["reference"] == "RHF" else scf.ROHF)(mol)
         mf.conv_tol = protocol.get("conv_tol", 1e-12)
+        mf.max_cycle = protocol.get("max_cycle", mf.max_cycle)
+        if protocol.get("scf_solver") == "newton":  # declared numerics: second-order SCF for transition-metal clusters
+            mf = mf.newton()
         mf.kernel()
         if not mf.converged:
             raise PipelineError("SCF_NOT_CONVERGED", system["system_id"])

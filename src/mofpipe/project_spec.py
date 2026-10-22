@@ -182,7 +182,26 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
         config = spec_from_recipe(config)
     protocols = _resolve_protocols(config, root, errors)
     config = {**config, "protocols": protocols}
+    generation = None
+    if protocols.get("topology_generation") is not None:
+        # Topology search: builder-generated parent frameworks stand in for supplied CIFs (topology_builders.py).
+        if config.get("source_structures"):
+            errors.append(_err("TOPOLOGY_SOURCE_CONFLICT", "source_structures",
+                               "declare either source_structures or protocols.topology_generation"))
+        else:
+            from .topology_builders import generate_topologies
+            generation = generate_topologies(config, root)
+            errors += generation["errors"]
+            if not generation["errors"]:
+                blocks_in = [{**b, "substitution": generation["substitutions"][b["id"]]}
+                             if b.get("id") in generation["substitutions"] else b for b in config.get("building_blocks") or []]
+                config = {**config, "source_structures": generation["sources"], "building_blocks": blocks_in,
+                          "candidate_topology_ids": generation["candidate_topology_ids"]}
+    per_source_cells = bool(config.get("source_structures")) and all(
+        isinstance(s, dict) and s.get("supercell_matrices") for s in config["source_structures"])
     for path in REQUIRED_FIELDS:
+        if path == "search.supercell_matrices" and per_source_cells:
+            continue  # every source (e.g. a generated net) declares its own working cell
         if _missing(_get(config, path)) and not (path == "chemistry.net_charge" and _get(config, path) == 0):
             errors.append(_err("SCIENTIFIC_SPEC_MISSING", path))
     for path, (code, task) in NOT_YET_SUPPORTED.items():
@@ -219,6 +238,9 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
     if protocols.get("model_selection"):
         errors += [_err("SCIENTIFIC_SPEC_MISSING", f"protocols.model_selection.{k}") for k in SELECTION_REQUIRED
                    if selection.get(k) is None]
+        if selection.get("on_inadequate", "halt") not in ("halt", "drop_topology"):
+            errors.append(_err("UNSUPPORTED_SELECTION_POLICY", "protocols.model_selection.on_inadequate",
+                               f"{selection['on_inadequate']}: halt | drop_topology"))
     encoding = protocols.get("encoding") or {}
     if protocols.get("encoding") and not (isinstance(encoding.get("ratio_penalty_eV"), (int, float))
                                           and not isinstance(encoding.get("ratio_penalty_eV"), bool)
@@ -352,6 +374,7 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
         physical={"errors": errors, "sources": sources, "protocols": protocols, "blocks": blocks,
                   "chemistry": chem, "tolerances": config.get("tolerances") or {}, "budgets": config.get("budgets") or {},
                   "lattices": physical_topologies, "transfer_topologies": transfer_topologies,
+                  "topology_generation": (generation or {}).get("report"),
                   "builder_info": {tid: lattice_info_for_builder(info, builder) for tid, info in physical_topologies.items()}},
     )
     pseudo_hashes = {el: p.get("sha256") for el, p in ((protocols.get("dft") or {}).get("pseudopotentials") or {}).items()}

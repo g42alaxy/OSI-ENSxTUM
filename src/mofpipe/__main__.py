@@ -126,13 +126,16 @@ def main(argv=None) -> int:
     b = sub.add_parser("embedding-benchmark", help="subtractive embedding vs an independent full high-level calculation")
     b.add_argument("--spec", required=True)
     b.add_argument("--run-dir", required=True)
-    a = sub.add_parser("agents", help="agent-assisted run: A1 setup, A2 Hamiltonian proposal, pipeline, A67 assessment")
+    g = sub.add_parser("generate-topologies", help="topology search: build candidate frameworks with the declared builder")
+    g.add_argument("--project", required=True)
+    a = sub.add_parser("agents", help="agent-assisted run: A1 topologies, A2 Hamiltonian, pipeline, A67 confirmation, "
+                                      "A4 optimisation loop")
     a.add_argument("--project", required=True)
     a.add_argument("--case", choices=CASES)
     a.add_argument("--correction", choices=CORRECTION_MODES)
     a.add_argument("--controls", default="controls.yaml")
     a.add_argument("--run-dir")
-    a.add_argument("--replay", help="JSON {A1: [...], A2: [...], A67: [...]} of scripted outputs; no API calls")
+    a.add_argument("--replay", help="JSON {A1: [...], A2: [...], A67: [...], A4: [...]} of scripted outputs; no API calls")
     a.add_argument("--engine", choices=("auto", "langgraph", "sequential"))
     a.add_argument("--brief", help="general description of the study for A1 (default: the project's purpose)")
     a.add_argument("--brief-file", help="file holding the design brief")
@@ -162,6 +165,17 @@ def main(argv=None) -> int:
     try:
         if args.command in ("agents", "agents-check", "agents-eval", "datasets-fetch", "agents-design-bench"):
             return _agents(args)
+        if args.command == "generate-topologies":
+            spec = load_project(args.project)
+            gen = (spec.physical or {}).get("topology_generation")
+            if gen is None:
+                raise PipelineError("SCIENTIFIC_SPEC_MISSING", "protocols.topology_generation")
+            print(json.dumps({"accepted": [{k: a.get(k) for k in ("net", "max_node_rmsd_A", "n_nodes", "n_edges", "supercell_matrix",
+                                                                   "n_substitution_sites", "cell")} for a in gen["accepted"]],
+                              "rejected": [{k: r.get(k) for k in ("net", "reason", "max_node_rmsd_A", "detail")} for r in gen["rejected"]],
+                              "versions": gen["versions"], "cache_key": gen["cache_key"],
+                              "project_errors": [e for e in spec.physical["errors"]]}, indent=2, default=str))
+            return 0 if gen["accepted"] and not spec.physical["errors"] else 1
         if args.command == "electronic-benchmark":
             from .electronic_solvers import run_electronic_benchmark
             from .store import RunStore

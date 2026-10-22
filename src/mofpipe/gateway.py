@@ -1,4 +1,4 @@
-"""Task 10 controller side: envelope validation of agent proposals (A1 / A2 / A67).
+"""Task 10 controller side: envelope validation of agent proposals (A1 / A2 / A67 / A4).
 
 Three runtime roles only (MOF_AI_Agent_Implementation_Guide-2): A1 initial setup, A2 Hamiltonian proposal and
 A67 final assessment. Each role answers one structured request; its logical functions below are the only
@@ -14,6 +14,7 @@ ROLE_TOOLS = {
     "A1": {"select_construction_options", "map_species_ids", "flag_missing_inputs"},
     "A2": {"propose_encoding", "propose_model_candidates", "select_compilation_path"},
     "A67": {"assess_structural_correctness", "compare_existing_results", "write_final_assessment"},
+    "A4": {"accept_candidates", "revise_hamiltonian"},
 }
 CONTROLLER_ONLY = {"advance_workflow"}  # state commits are never delegated to an LLM role
 REQUIRED = ("project_id", "expected_state_version", "role", "evidence_artifact_ids", "proposed_action")
