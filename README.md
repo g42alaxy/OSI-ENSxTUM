@@ -1,9 +1,10 @@
 # QuMOF: LLM-assisted energy-grounded quantum–classical design of multivariate MOFs
 
-<div align="center">
-  
-[![Presentation](https://img.shields.io/badge/📊_Presentation-Google_Slides-orange)](https://docs.google.com/presentation/d/1q_MO2JOv1MwF3GlOxD19ZWfdUDwSwppJ/edit?usp=sharing&ouid=115306472035042428210&rtpof=true&sd=true)
-</div>
+<h1 align="center">
+    <img width="800" height="auto" src="https://github.com/user-attachments/assets/d6b6932d-a1e3-4c09-b88d-d0a70e9386c0" />
+
+  [![Presentation](https://img.shields.io/badge/📊_Presentation-Google_Slides-orange)](https://docs.google.com/presentation/d/1q_MO2JOv1MwF3GlOxD19ZWfdUDwSwppJ/edit?usp=sharing&ouid=115306472035042428210&rtpof=true&sd=true)
+</h1>
 
 
 Dmitrii Zhiganov, Matvei Anoshin, Gintaras Gliaudelis
