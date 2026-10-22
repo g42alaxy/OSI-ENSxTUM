@@ -11,3 +11,11 @@ controls.yaml
 data/reference/
 .aiida/
 runtime.log
+controls_*.yaml
+!controls_example.yaml
+
+# local planning docs, not pushed
+instructions/*
+!instructions/project_spec.template.json
+TODO.md
+IMPLEMENTATION.md
