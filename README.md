@@ -84,6 +84,23 @@ PySCF engine is unavailable on that platform.
 - **QPU:** `optimizer.quantum_protocol` with `"kind": "qpu_fake_device", "device": "fake_brisbane", "python": ".venv/bin/python"`.
 - **AiiDA:** `python -m mofpipe run --engine aiida ...`.
 
+## Design-Hamiltonian benchmark (Kang et al. 2025)
+
+`benchmarks/kang2025/` holds the inputs Kang et al. started from: the net-derived site graph with edge distances,
+the linker characteristic lengths and the composition. There are three materials: Cu-THQ-HHTP, Py-MV-DBA-COF and MUF-7.
+
+In design mode A2 (the LLM) composes the Hamiltonian from a term catalogue: length balance and like/unlike pair
+mixing per edge kind, with distance, distance^α or uniform weights. Code computes the coefficients, solves exactly,
+runs QAOA and optionally samples on FakeBrisbane. The result is scored against the experimental arrangement, which
+the model never sees.
+
+`kang_control` runs the paper's own weighting through the same code.
+
+```bash
+PYTHONPATH=src .venv/bin/python -m mofpipe agents-design-bench --models qwen/qwen3.8-flash,qwen/qwen3.8-max-0902 \
+    --repeats 3 --reasoning-effort low --qpu-python .venv/bin/python
+```
+
 ## Runtime agents (`src/mofpipe/agents`, optional)
 
 Three LLM roles from `MOF_AI_Agent_Implementation_Guide-2` (it supersedes the role list in `instructions/10`). Each role

@@ -16,7 +16,7 @@ DEFAULTS = {
     "openrouter": {
         "api_key": "", "base_url": "https://openrouter.ai/api/v1", "model": "",
         "temperature": 0, "reasoning": None, "provider": {}, "app_url": "", "app_title": "mofpipe-agents",
-        "timeout_s": [10, 300], "max_tokens": {"A1": 8000, "A2": 10000, "A67": 24000},
+        "timeout_s": [10, 120], "deadline_s": 600, "max_tokens": {"A1": 8000, "A2": 32000, "A67": 24000},
     },
     "budget": {"max_llm_requests": 3, "allow_extra_request": True, "allow_model_expansion": False},
     "cache": {"enabled": True, "dir": "runs/.agent_cache"},

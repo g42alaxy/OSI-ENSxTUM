@@ -50,6 +50,23 @@ def _agents(args) -> int:
     from .agents.runner import AgentRun, check_connections
 
     controls = load_controls(args.controls)
+    if args.command == "agents-design-bench":
+        from .agents.design import load_materials, rescore, run_benchmark
+        if args.rescore:
+            rescore(args.out, load_materials(args.materials))
+            print((Path(args.out) / "results.md").read_text())
+            return 0
+        models = [] if args.control_only else [m for m in args.models.split(",") if m]
+        if models and controls.errors():
+            print(json.dumps({"error": "INVALID_CONTROLS", "fields": [{"code": c, "field": f} for c, f in controls.errors()]}),
+                  file=sys.stderr)
+            return 2
+        qpu = {"device": "fake_brisbane", "python": args.qpu_python, "shots": 4000} if args.qpu_python else None
+        extra = {"reasoning": {"effort": args.reasoning_effort}} if args.reasoning_effort else {}
+        run_benchmark(load_materials(args.materials), lambda m: load_controls(args.controls, {"openrouter": {"model": m, **extra}}),
+                      models, args.repeats, args.out, qpu=qpu, workers=args.workers)
+        print((Path(args.out) / "results.md").read_text())
+        return 0
     if args.command == "datasets-fetch":
         from .agents.datasets import fetch
         result = {d["id"]: fetch(d) for d in controls["datasets"] if d.get("hf")}
@@ -128,11 +145,22 @@ def main(argv=None) -> int:
     v.add_argument("--brief")
     f = sub.add_parser("datasets-fetch", help="download the reference datasets declared in controls.yaml (hf: repo/revision)")
     f.add_argument("--controls", default="controls.yaml")
+    d = sub.add_parser("agents-design-bench", help="Kang et al. (2025) benchmark: A2 designs the Hamiltonian, code solves")
+    d.add_argument("--controls", default="controls.yaml")
+    d.add_argument("--materials", default="benchmarks/kang2025")
+    d.add_argument("--models", default="qwen/qwen3.8-flash", help="comma-separated OpenRouter model IDs")
+    d.add_argument("--repeats", type=int, default=3)
+    d.add_argument("--out", default="runs/kang2025_design")
+    d.add_argument("--workers", type=int, default=4)
+    d.add_argument("--qpu-python", help="interpreter with qiskit: also sample each design on fake_brisbane")
+    d.add_argument("--control-only", action="store_true", help="only the paper's weighting through the same code (no LLM)")
+    d.add_argument("--reasoning-effort", choices=("low", "medium", "high"), help="OpenRouter reasoning effort for A2")
+    d.add_argument("--rescore", action="store_true", help="recompute metrics of the runs in --out from their saved designs")
     c = sub.add_parser("agents-check", help="check controls.yaml: OpenRouter key/model and Valency MCP access")
     c.add_argument("--controls", default="controls.yaml")
     args = parser.parse_args(argv)
     try:
-        if args.command in ("agents", "agents-check", "agents-eval", "datasets-fetch"):
+        if args.command in ("agents", "agents-check", "agents-eval", "datasets-fetch", "agents-design-bench"):
             return _agents(args)
         if args.command == "electronic-benchmark":
             from .electronic_solvers import run_electronic_benchmark

@@ -307,11 +307,18 @@ def test_openrouter_request_follows_the_guide(monkeypatch, tmp_path):
         def __init__(self, status, body):
             self.status_code, self._body, self.text = status, body, json.dumps(body)
 
+        def iter_content(self, size):
+            yield b"   "  # keep-alive whitespace before the body, as OpenRouter sends
+            yield self.text.encode()
+
+        def close(self):
+            pass
+
         def json(self):
             return self._body
 
-    def post(url, headers, json, timeout):
-        sent.update(url=url, headers=headers, body=json)
+    def post(url, headers, json, timeout, stream=False):
+        sent.update(url=url, headers=headers, body=json, stream=stream)
         return replies.pop(0)
 
     import requests
@@ -327,6 +334,7 @@ def test_openrouter_request_follows_the_guide(monkeypatch, tmp_path):
     assert body["response_format"]["json_schema"]["strict"] is True and body["stream"] is False
     assert "maxItems" not in json.dumps(body["response_format"])  # bounds are validated locally instead
     assert sent["headers"]["Authorization"] == "Bearer sk-or-test" and meta["provider"] == "Alibaba"
+    assert sent["stream"] is True and body["stream"] is False  # body read incrementally against the deadline
     truncated = {**ok, "choices": [{"finish_reason": "length", "message": {"content": "{\"status\""}}]}
     replies = [Response(200, truncated), Response(401, {"error": "bad key"})]
     for code in ("OUTPUT_TRUNCATED", "API_AUTH_ERROR"):

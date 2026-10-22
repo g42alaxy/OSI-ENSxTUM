@@ -1,0 +1,124 @@
+{
+  "id": "muf7",
+  "name": "MUF-7",
+  "source": {
+    "paper": "Kang, Kim & Kim, Quantum Computing Based Design of Multivariate Porous Materials, ACS Cent. Sci. (2025)",
+    "doi": "10.1021/acscentsci.5c00918",
+    "arxiv": "2502.06339v2",
+    "inputs": "Table S2 (characteristic linker lengths), Table S3 and Fig. S2 (site graphs, edge distances)",
+    "reference": "Fig. 5 / Fig. S3: the lowest-Hamiltonian configuration of each structure corresponds to the experimental structure"
+  },
+  "public": {
+    "description": "Three-dimensional multivariate MOF built on Zn4O clusters with a fixed tritopic scaffold; the variable sites hold two ditopic linkers, BDC (short) and BPDC (long), in a 1:1 ratio, on the ith-d net. 6 variable linker sites in the cell; topological edges join sites bridging the same cluster, second_neighbor edges join next-nearest sites.",
+    "net": "ith-d",
+    "n_sites": 6,
+    "linkers": [
+      {
+        "id": "BDC",
+        "connectivity": "ditopic",
+        "characteristic_length_A": 2.869
+      },
+      {
+        "id": "BPDC",
+        "connectivity": "ditopic",
+        "characteristic_length_A": 5.025
+      }
+    ],
+    "composition": {
+      "BDC": 3,
+      "BPDC": 3
+    },
+    "edges": [
+      {
+        "i": 0,
+        "j": 1,
+        "distance_A": 3.92,
+        "kind": "topological"
+      },
+      {
+        "i": 2,
+        "j": 3,
+        "distance_A": 3.92,
+        "kind": "topological"
+      },
+      {
+        "i": 4,
+        "j": 5,
+        "distance_A": 3.92,
+        "kind": "topological"
+      },
+      {
+        "i": 1,
+        "j": 2,
+        "distance_A": 3.92,
+        "kind": "second_neighbor"
+      },
+      {
+        "i": 3,
+        "j": 4,
+        "distance_A": 3.92,
+        "kind": "second_neighbor"
+      },
+      {
+        "i": 5,
+        "j": 0,
+        "distance_A": 3.92,
+        "kind": "second_neighbor"
+      }
+    ]
+  },
+  "reference": {
+    "ground_state_bitstrings": [
+      "010101",
+      "101010"
+    ],
+    "encoding": {
+      "BDC": 0,
+      "BPDC": 1
+    },
+    "rule": "BDC and BPDC alternate around the site cycle: every edge joins different linkers",
+    "kang_vqe_ground_state_probability": 0.255,
+    "kang_control": {
+      "status": "OK",
+      "missing_input_ids": [],
+      "error_codes": [],
+      "terms": [
+        {
+          "term_id": "length_balance",
+          "edge_kinds": [
+            "topological"
+          ],
+          "weighting": "distance",
+          "alpha": 1.0,
+          "relative_weight": 1.0,
+          "preference": "not_applicable"
+        },
+        {
+          "term_id": "length_balance",
+          "edge_kinds": [
+            "second_neighbor"
+          ],
+          "weighting": "distance_power",
+          "alpha": 0.1,
+          "relative_weight": 1.0,
+          "preference": "not_applicable"
+        }
+      ]
+    },
+    "kang_hamiltonian": {
+      "source": "Eq. 2, 5-8 and Note S1 (fixed-composition states: ratio and occupancy terms vanish); weights w_ij from Table S3",
+      "formula": "sum over edges of w_kind * (L_e - Lbar)^2, L_e = 2 (l_i + l_j), Lbar = mean of L_e over all edges",
+      "weights": {
+        "topological": 3.92,
+        "second_neighbor": 1.15
+      },
+      "published_feasible_levels": [
+        0.0,
+        42.765,
+        145.772,
+        188.537
+      ],
+      "published_levels_source": "Fig. S3 (distinct Hamiltonian values of fixed-composition states, lowest first)"
+    }
+  }
+}

@@ -17,10 +17,11 @@ openrouter:
     # data_collection: deny            # only providers that do not retain prompts
   app_url: ""                          # optional HTTP-Referer for OpenRouter app attribution
   app_title: mofpipe-agents            # optional X-Title
-  timeout_s: [10, 300]                 # connect, read
+  timeout_s: [10, 120]                 # connect, per-read
+  deadline_s: 600                      # hard wall-clock limit per request (keep-alive bytes do not extend it)
   max_tokens:                          # per role, visible output plus reasoning (flash used ~3.7k reasoning on A1)
     A1: 8000
-    A2: 10000
+    A2: 32000                          # design mode reasons ~15-17k tokens before answering
     A67: 24000
 
 budget:

@@ -68,7 +68,7 @@ class MLPotentialBackend:
             raise PipelineError("BACKEND_UNAVAILABLE", f"ML-potential interpreter/worker not found: "
                                                        f"{self.protocol.get('python')} / {self.protocol.get('worker')}")
         self.worker_sha256 = hashlib.sha256(Path(self.worker).read_bytes()).hexdigest()
-        scientific = {k: v for k, v in self.protocol.items() if k not in ("python", "worker", "timeout_s", "device")}
+        scientific = {k: v for k, v in self.protocol.items() if k not in ("python", "worker", "timeout_s", "device", "n_threads")}
         self.protocol_hash = content_hash({"protocol": scientific, "worker_sha256": self.worker_sha256})
         self.fidelity = f"ML:{self.protocol['model']}+{self.protocol['dispersion']}:{self.protocol_hash[:12]}"
         self._identity = None
@@ -142,11 +142,12 @@ class MLPotentialBackend:
                                for g, j in todo]}))
             self.store.bump("ml_relaxations", len(todo))
             self.store.log("ml_batch_submitted", purpose=purpose, n=len(todo))
-            outcome, wall = self._run(batch_dir, ["batch.json"], self.protocol.get("timeout_s", 3600))
+            # timeout_s is per structure; the worker checkpoints results.json after each one
+            outcome, wall = self._run(batch_dir, ["batch.json"], self.protocol.get("timeout_s", 1800) * len(todo))
             results = json.loads((batch_dir / "results.json").read_text()).get("results", {}) \
                 if (batch_dir / "results.json").exists() else {}
             for g, job_id in todo:
-                res = results.get(job_id) or {"status": "FAILED", "error": f"worker: {outcome['stderr'][-300:]}"}
+                res = results.get(job_id) or {"status": "FAILED", "error": f"worker: {outcome['stderr'][-300:] or 'no result'}"}
                 res = {**res, "identity": identity, "fidelity": self.fidelity}
                 if res["status"] == "SUCCEEDED":  # only finished relaxations are reusable
                     job_dir = self.store.jobs / job_id.replace(":", "__")

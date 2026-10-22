@@ -74,7 +74,27 @@ A67_SCHEMA = _obj({
     "unresolved_codes": _arr({"type": "string", "enum": ISSUE_CODES}, 32),
 })
 
-SCHEMAS = {"A1": A1_SCHEMA, "A2": A2_SCHEMA, "A67": A67_SCHEMA}
+# A2 design mode (agents/design.py): no energy labels exist, so A2 composes the Hamiltonian from a catalogue of term
+# types; code computes every coefficient from the supplied geometry and linker lengths and enforces the composition.
+DESIGN_TERMS = ["length_balance", "unlike_pair_mixing"]
+EDGE_KINDS = ["topological", "second_neighbor"]
+WEIGHTINGS = ["distance", "distance_power", "uniform"]
+PREFERENCES = ["penalize_like_pairs", "penalize_unlike_pairs", "not_applicable"]
+A2_DESIGN_SCHEMA = _obj({
+    "status": {"type": "string", "enum": PROPOSAL_STATUS},
+    "terms": _arr(_obj({
+        "term_id": {"type": "string", "enum": DESIGN_TERMS},
+        "edge_kinds": _arr({"type": "string", "enum": EDGE_KINDS}, 2, 1),
+        "weighting": {"type": "string", "enum": WEIGHTINGS},
+        "alpha": {"type": "number", "minimum": 0, "maximum": 1},
+        "relative_weight": {"type": "number", "minimum": 0, "maximum": 1},
+        "preference": {"type": "string", "enum": PREFERENCES},
+    }), 6),
+    "missing_input_ids": _arr(_ID, 64),
+    "error_codes": _arr({"type": "string", "enum": A2_CODES}, 16),
+})
+
+SCHEMAS = {"A1": A1_SCHEMA, "A2": A2_SCHEMA, "A67": A67_SCHEMA, "A2_design": A2_DESIGN_SCHEMA}
 ROLE_ACTION = {"A1": "select_construction_options", "A2": "propose_model_candidates", "A67": "write_final_assessment"}
 _TRANSPORT_DROP = {"minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum"}
 
@@ -111,6 +131,16 @@ PROMPTS = {
            " validated; code fits, validates and selects. If expansion_request is present, previously tried models"
            " failed validation for the listed topologies: propose at least one untried catalogue model for each of"
            " them. Allowed error codes: " + ", ".join(A2_CODES) + ". No prose." + _COMMON),
+    "A2_design": ("You are A2, the Hamiltonian-proposal step, in design mode: no energy labels exist for this material."
+                  " Construct the occupation Hamiltonian whose lowest-cost arrangement should be the most stable linker"
+                  " arrangement, by choosing terms from term_catalogue: which terms, which edge kinds each acts on, the"
+                  " edge weighting (and alpha for distance_power), a relative weight in [0, 1] per term, and for"
+                  " unlike_pair_mixing whether like or unlike linker pairs are penalised (length_balance uses"
+                  " not_applicable). Code computes every coefficient from the supplied edges, distances and linker"
+                  " lengths, keeps the composition exactly fixed (one linker per site), and finds the minimum. Base the"
+                  " choice on the material's chemistry and geometry. Do not output coefficients, energies or predicted"
+                  " arrangements. Output only schema-valid JSON; no prose. Allowed error codes: " + ", ".join(A2_CODES)
+                  + "." + _COMMON),
     "A67": ("You are A67, the final reviewer. Assess the supplied structural-check evidence for every final candidate"
             " and compare the candidates with the retrieved published evidence. Preserve mandatory numerical verdicts:"
             " never report PASS_CHECKED_CRITERIA when a required check failed, was skipped or is missing. In"

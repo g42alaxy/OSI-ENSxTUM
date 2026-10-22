@@ -10,6 +10,7 @@ and model configuration. Provenance (response/model/provider IDs, usage, hashes)
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from ..contract import PipelineError, canonical_json, content_hash
@@ -20,7 +21,9 @@ REPAIRABLE = {"INVALID_JSON", "SCHEMA_VIOLATION", "OUTPUT_TRUNCATED"}
 
 
 class AgentCallError(PipelineError):
-    pass
+    def __init__(self, code: str, detail: str = "", meta: dict | None = None):
+        super().__init__(code, detail)
+        self.meta = meta or {}  # provider metadata of a failed response (usage is billed even when truncated)
 
 
 def check_schema(role: str, output) -> None:
@@ -57,11 +60,21 @@ class OpenRouterClient:
             headers["HTTP-Referer"] = c["app_url"]
         if c["app_title"]:
             headers["X-Title"] = c["app_title"]
+        # The body is read incrementally against a wall-clock deadline: OpenRouter keeps idle requests alive with
+        # whitespace, so a per-read timeout alone never fires on a stalled generation.
+        deadline = time.monotonic() + c.get("deadline_s", 600)
         try:
             response = requests.post(c["base_url"].rstrip("/") + "/chat/completions", headers=headers, json=body,
-                                     timeout=tuple(c["timeout_s"]))
+                                     timeout=tuple(c["timeout_s"]), stream=True)
+            raw = bytearray()
+            for chunk in response.iter_content(8192):
+                raw += chunk
+                if time.monotonic() > deadline:
+                    response.close()
+                    raise AgentCallError("API_TRANSIENT", f"deadline {c.get('deadline_s', 600)} s exceeded")
         except (requests.Timeout, requests.ConnectionError) as exc:
             raise AgentCallError("API_TRANSIENT", type(exc).__name__) from exc
+        response._content = bytes(raw)  # json() / text below read the buffered body
         status = response.status_code
         if status in (401, 403):
             raise AgentCallError("API_AUTH_ERROR", str(status))
@@ -81,13 +94,13 @@ class OpenRouterClient:
         meta = {"response_id": data.get("id"), "model": data.get("model"), "provider": data.get("provider"),
                 "usage": data.get("usage"), "finish_reason": choice.get("finish_reason")}
         if message.get("refusal"):
-            raise AgentCallError("MODEL_REFUSAL", str(message["refusal"])[:300])
+            raise AgentCallError("MODEL_REFUSAL", str(message["refusal"])[:300], meta)
         if message.get("tool_calls"):
-            raise AgentCallError("UNEXPECTED_TOOL_CALL", "the contract has no tools")
+            raise AgentCallError("UNEXPECTED_TOOL_CALL", "the contract has no tools", meta)
         if choice.get("finish_reason") == "length":
-            raise AgentCallError("OUTPUT_TRUNCATED", f"max_tokens={max_tokens}; truncated JSON is a failed response")
+            raise AgentCallError("OUTPUT_TRUNCATED", f"max_tokens={max_tokens}; truncated JSON is a failed response", meta)
         if choice.get("finish_reason") != "stop":
-            raise AgentCallError("UNEXPECTED_FINISH_REASON", str(choice.get("finish_reason")))
+            raise AgentCallError("UNEXPECTED_FINISH_REASON", str(choice.get("finish_reason")), meta)
         return message.get("content") or "", meta
 
 
@@ -199,6 +212,7 @@ def call_role(role: str, packet: dict, *, client, ledger: Ledger, cache: Cache, 
                 raise AgentCallError("INVALID_JSON", str(exc)) from exc
             check_schema(role, output)
         except AgentCallError as exc:
+            meta = {**getattr(exc, "meta", {}), **meta}
             ledger.record({**base, "attempt": kind, "cache_hit": False, **meta, "outcome": "ERROR", "error": exc.as_dict()})
             retry = exc.code in RETRY_TRANSIENT or exc.code in REPAIRABLE
             if not (retry and ledger.extra_available):
