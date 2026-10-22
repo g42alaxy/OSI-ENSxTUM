@@ -5,9 +5,9 @@ pytest.importorskip("jsonschema")
 
 from conftest import REPO  # noqa: E402
 
-from mofpipe.agents.client import ReplayClient, check_schema  # noqa: E402
-from mofpipe.agents.controls import load_controls  # noqa: E402
-from mofpipe.agents.design import build_packet, load_materials, run_benchmark, validate_design  # noqa: E402
+from qumof.agents.client import ReplayClient, check_schema  # noqa: E402
+from qumof.agents.controls import load_controls  # noqa: E402
+from qumof.agents.design import build_packet, load_materials, run_benchmark, validate_design  # noqa: E402
 
 MATERIALS = {m["id"]: m for m in load_materials(REPO / "benchmarks/kang2025")}
 
@@ -49,7 +49,7 @@ def test_design_contract_rejects_invalid_or_constant_hamiltonians():
 
 
 def test_reference_reproduces_the_published_spectrum_and_scores_the_paper_weighting_as_exact():
-    from mofpipe.agents.design import compile_design, kang_spectrum, spectrum_agreement
+    from qumof.agents.design import compile_design, kang_spectrum, spectrum_agreement
     for material in MATERIALS.values():
         packet = build_packet(material)
         levels = sorted({round(v, 3) for v in kang_spectrum(material, packet).values()})

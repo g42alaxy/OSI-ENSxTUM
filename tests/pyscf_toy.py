@@ -9,7 +9,7 @@ pseudopotentials: the energy difference between two decorations moves by 0.6 Ha 
 pipeline stops at the convergence gate (DFT_SETTINGS_NOT_CONVERGED). A completing run needs ke_cutoff_Ha of order
 100 Ha (hours on a CPU; use device "gpu"). The geometry is idealised and not a real MOF: every artifact is SYNTHETIC.
 
-    python tests/pyscf_toy.py OUT_DIR   # writes OUT_DIR/project.json for `python -m mofpipe run`
+    python tests/pyscf_toy.py OUT_DIR   # writes OUT_DIR/project.json for `python -m qumof run`
 """
 import copy
 import json

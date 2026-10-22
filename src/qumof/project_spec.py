@@ -1,6 +1,6 @@
 """Task 01 (intake, physical projects): ProjectSpec v0.1 loader, recipe adapter and validator.
 
-Loads ``instructions/project_spec.template.json``-shaped projects into the same
+Loads ``project_spec.template.json``-shaped projects into the same
 ``ProjectSpec`` dataclass as the synthetic fixture. Every required scientific
 field that is null, empty or absent becomes one BLOCKED error with code
 SCIENTIFIC_SPEC_MISSING and its exact field path; nothing is defaulted. A

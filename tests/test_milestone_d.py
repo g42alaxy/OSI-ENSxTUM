@@ -7,11 +7,11 @@ from fractions import Fraction
 import pytest
 from conftest import PROJECT, REPO
 
-from mofpipe import configuration_model as cm
-from mofpipe import datasets, encoding, optimization, qaoa
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project, validate_project
-from mofpipe.orchestrator import run_pipeline
+from qumof import configuration_model as cm
+from qumof import datasets, encoding, optimization, qaoa
+from qumof.contract import PipelineError
+from qumof.intake import load_project, validate_project
+from qumof.orchestrator import run_pipeline
 
 
 def _hamiltonians(case):
@@ -153,8 +153,8 @@ def test_pipeline_quantum_benchmark_with_quadratization(tmp_path):
 
 def test_electronic_solvers_agree_on_identical_tiny_hamiltonian():
     pytest.importorskip("pyscf")
-    from mofpipe import electronic_solvers as es
-    from mofpipe.active_space import prepare_active_space, problem_from_artifact, read_fcidump
+    from qumof import electronic_solvers as es
+    from qumof.active_space import prepare_active_space, problem_from_artifact, read_fcidump
     system = {"system_id": "LiH", "atoms": [["Li", 0, 0, 0], ["H", 0, 0, 1.5949]], "unit": "Angstrom", "charge": 0, "spin": 0}
     protocol = {"protocol_id": "lih_cas44", "basis": "sto-3g", "reference": "RHF", "n_active_electrons": 4,
                 "n_active_orbitals": 4, "embedding": "none"}
@@ -175,7 +175,7 @@ def test_electronic_solvers_agree_on_identical_tiny_hamiltonian():
 
 def test_published_h2_benchmark_is_reproduced(tmp_path):
     pytest.importorskip("pyscf")
-    from mofpipe.__main__ import main
+    from qumof.__main__ import main
     spec_path = REPO / "benchmarks/h2_sto3g_szabo_ostlund.json"
     assert main(["electronic-benchmark", "--spec", str(spec_path), "--run-dir", str(tmp_path / "run")]) == 0
     report = next(json.loads(p.read_text()) for p in (tmp_path / "run/artifacts").glob("ElectronicBenchmarkReport__*"))

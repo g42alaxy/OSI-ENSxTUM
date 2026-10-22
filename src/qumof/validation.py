@@ -96,19 +96,19 @@ def validate_structure(spec, calculation: dict, built_geometry: dict) -> dict:
     mapping = map_to_parent_slots(_structure(relaxed), spec.physical["builder_info"][calculation["topology_id"]],
                                   builder["bond_tolerance_A"], builder["slot_match_tolerance_A"])
     checks["post_relaxation_slot_mapping"] = {"status": StageStatus.COMPLETED.value if mapping["retained"] else StageStatus.FAILED.value,
-                                              "tool": "mofpipe.framework.map_to_parent_slots", "reason": mapping["reason"],
+                                              "tool": "qumof.framework.map_to_parent_slots", "reason": mapping["reason"],
                                               "parameters": {"bond_tolerance_A": builder["bond_tolerance_A"],
                                                              "slot_match_tolerance_A": builder["slot_match_tolerance_A"]}}
     conv = calculation.get("convergence") or {}
     relaxed_by_protocol = not str(calculation.get("geometry_purpose", "")).startswith("unrelaxed")
     checks["residual_force_stress"] = {
         "status": (StageStatus.COMPLETED.value if relaxed_by_protocol else "NOT_APPLICABLE_UNRELAXED_GEOMETRY"),
-        "tool": "mofpipe.dft", "max_force_eV_per_A": conv.get("max_force_eV_per_A"),
+        "tool": "qumof.dft", "max_force_eV_per_A": conv.get("max_force_eV_per_A"),
         "max_stress_kbar": conv.get("max_stress_kbar"), "force_tolerance_eV_per_A": tolerances["force_tolerance_eV_per_angstrom"]}
     dmin = min_interatomic_distance(_structure(relaxed), 3.0)
     checks["min_interatomic_distance"] = {"status": (StageStatus.COMPLETED.value if dmin >= builder["min_interatomic_distance_A"]
                                                      else StageStatus.FAILED.value),
-                                          "tool": "mofpipe.framework", "value_A": round(dmin, 4),
+                                          "tool": "qumof.framework", "value_A": round(dmin, 4),
                                           "threshold_A": builder["min_interatomic_distance_A"]}
     parent = spec.physical["lattices"][calculation["topology_id"]]["structure"]
     parent_geometry = {"lattice_A": parent["lattice"], "elements": [a["element"] for a in parent["atoms"]],
@@ -116,9 +116,9 @@ def validate_structure(spec, calculation: dict, built_geometry: dict) -> dict:
     cn_relaxed = metal_coordination(relaxed, builder["bond_tolerance_A"])
     cn_parent = metal_coordination(parent_geometry, builder["bond_tolerance_A"])
     checks["metal_coordination"] = {"status": StageStatus.COMPLETED.value if cn_relaxed == cn_parent else StageStatus.FAILED.value,
-                                    "tool": "mofpipe.framework.bond_graph", "relaxed": cn_relaxed, "parent": cn_parent}
+                                    "tool": "qumof.framework.bond_graph", "relaxed": cn_relaxed, "parent": cn_parent}
     (l0, a0), (l1, a1) = _lengths_angles(built_geometry["lattice_A"]), _lengths_angles(relaxed["lattice_A"])
-    checks["cell_distortion"] = {"status": StageStatus.COMPLETED.value, "tool": "mofpipe.validation",
+    checks["cell_distortion"] = {"status": StageStatus.COMPLETED.value, "tool": "qumof.validation",
                                  "length_change_percent": [round(100 * (b - a) / a, 3) for a, b in zip(l0, l1)],
                                  "angle_change_deg": [round(b - a, 3) for a, b in zip(a0, a1)]}
     cif = write_cif(calculation["configuration_id"].replace(":", "_"), relaxed["lattice_A"], relaxed["elements"],

@@ -5,11 +5,11 @@ from copy import deepcopy
 import pytest
 from conftest import PROJECT, copy_fixture, harness_json, read_jsonl
 
-from mofpipe import datasets
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project, validate_project
-from mofpipe.orchestrator import run_pipeline
-from mofpipe.structures import validate_occupation
+from qumof import datasets
+from qumof.contract import PipelineError
+from qumof.intake import load_project, validate_project
+from qumof.orchestrator import run_pipeline
+from qumof.structures import validate_occupation
 
 
 def codes(report):

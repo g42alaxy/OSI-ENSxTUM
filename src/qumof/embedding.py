@@ -228,7 +228,7 @@ class ClusterBackend:
         return dict(self.protocol["high_level" if role == "high" else "low_level"])
 
     def submit(self, cluster_hash: str, cluster: dict, role: str, purpose: str) -> str:
-        job = {"schema": "mofpipe_cluster_job_v1", "cluster_hash": cluster_hash, "elements": cluster["elements"],
+        job = {"schema": "qumof_cluster_job_v1", "cluster_hash": cluster_hash, "elements": cluster["elements"],
                "coords_A": cluster["coords_A"], "charge": self.protocol["cluster_charge"], "spin": self.protocol["cluster_spin"],
                "basis": self.protocol["basis"], "ecp": self.protocol.get("ecp"), "level": self.level(role),
                "conv_tol_Ha": self.protocol["conv_tol_Ha"], "n_threads": self.protocol["n_cores"],

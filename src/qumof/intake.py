@@ -150,7 +150,7 @@ def load_project(project_path, case: str | None = None, correction_mode: str | N
     if overrides:
         config = _deep_merge(config, overrides)
     if config.get("schema") != FIXTURE_SCHEMA and ("schema_version" in config or "case_id" in config):
-        # ProjectSpec v0.1 (instructions/project_spec.template.json) or a physical_case recipe.
+        # ProjectSpec v0.1 (project_spec.template.json) or a physical_case recipe.
         if case not in (None, "physical") or correction_mode not in (None, "none"):
             raise PipelineError("UNSUPPORTED_FOR_PHYSICAL_PROJECT", "case/correction modes belong to the synthetic fixture")
         from .project_spec import load_physical_project
@@ -301,7 +301,7 @@ def agent_request_ceilings(rounds: int) -> tuple:
 
 
 def runtime_agent_errors(spec: ProjectSpec) -> list:
-    """Agent policy (MOF_AI_Agent_Implementation_Guide-2 / Task 10): off, or A1/A2/A67(/A4) via ``mofpipe agents``."""
+    """Agent policy (MOF_AI_Agent_Implementation_Guide-2 / Task 10): off, or A1/A2/A67(/A4) via ``qumof agents``."""
     agents = spec.config.get("runtime_agents", {})
     if agents.get("enabled") is False and agents.get("llm_calls_allowed") is False:
         return [] if spec.agent_plan is None else [("AGENT_PLAN_WITH_AGENTS_DISABLED", "agent_plan is set")]
@@ -317,7 +317,7 @@ def runtime_agent_errors(spec: ProjectSpec) -> list:
     elif agents.get("max_llm_requests") not in agent_request_ceilings(rounds):
         errors.append(("AGENT_POLICY_INVALID", f"max_llm_requests must be one of {agent_request_ceilings(rounds)}"))
     if spec.agent_plan is None:
-        errors.append(("AGENT_RUNNER_REQUIRED", "runtime agents run only through `python -m mofpipe agents`"))
+        errors.append(("AGENT_RUNNER_REQUIRED", "runtime agents run only through `python -m qumof agents`"))
     return errors
 
 

@@ -12,8 +12,8 @@ PROJECT = FIXTURE / "project.json"
 CASES = ("core_pairwise", "higher_order")
 MODES = ("none", "constant", "topology_dependent")
 
-from mofpipe.intake import load_project  # noqa: E402
-from mofpipe.orchestrator import run_pipeline  # noqa: E402
+from qumof.intake import load_project  # noqa: E402
+from qumof.orchestrator import run_pipeline  # noqa: E402
 
 
 def read_jsonl(path):

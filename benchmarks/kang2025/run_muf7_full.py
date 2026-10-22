@@ -119,14 +119,14 @@ def zn4o_cluster(atoms) -> dict:
 
 def cluster_vqe_sqd(cluster: dict, workdir: Path) -> dict:
     workdir.mkdir(parents=True, exist_ok=True)
-    job = {"schema": "mofpipe_cluster_job_v1", "cluster_hash": "", **cluster, "charge": 0, "spin": 0, "basis": "sto-3g",
+    job = {"schema": "qumof_cluster_job_v1", "cluster_hash": "", **cluster, "charge": 0, "spin": 0, "basis": "sto-3g",
            "ecp": None, "conv_tol_Ha": 1e-8, "n_threads": 8, "provenance": "MUF-7 orb-relaxed PORMAKE build",
            "level": {"method": "active_space", "solver": "sqd_simulation",
                      "active_space": {"protocol_id": "zn4o_cas44", "reference": "RHF", "scf_solver": "newton",
                                       "conv_tol": 1e-8, "n_active_electrons": 4, "n_active_orbitals": 4},
                      "sqd": {"shots": 2000, "seed": 1, "flip_probability": 0.02}}}
     (workdir / "input.json").write_text(json.dumps(job))
-    proc = subprocess.run([sys.executable, str(REPO / "src/mofpipe/cluster_worker.py"), "input.json"], cwd=workdir,
+    proc = subprocess.run([sys.executable, str(REPO / "src/qumof/cluster_worker.py"), "input.json"], cwd=workdir,
                           capture_output=True, text=True, timeout=3600)
     if not (workdir / "result.json").exists():
         return {"status": "FAILED", "error": proc.stderr[-300:]}
@@ -155,8 +155,8 @@ def main(argv=None) -> int:
     p.add_argument("--fmax", type=float, default=0.1)
     args = p.parse_args(argv)
     sys.path.insert(0, str(REPO / "src"))
-    from mofpipe.agents.controls import load_controls
-    from mofpipe.agents.design import (build_packet, compile_design, evaluate_polynomial, feasible_states, kang_spectrum,
+    from qumof.agents.controls import load_controls
+    from qumof.agents.design import (build_packet, compile_design, evaluate_polynomial, feasible_states, kang_spectrum,
                                        load_materials, run_one)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -172,7 +172,7 @@ def main(argv=None) -> int:
     with ThreadPoolExecutor(max_workers=6) as pool:
         rows = list(pool.map(lambda j: run_one(material, None if j[0] == "kang_control" else load_controls(
             args.controls, {"openrouter": {"model": j[0], "reasoning": {"effort": "low"}}}), j[0], j[1], out / "design",
-            None if j[0] == "kang_control" else __import__("mofpipe.agents.client", fromlist=["x"]).OpenRouterClient(
+            None if j[0] == "kang_control" else __import__("qumof.agents.client", fromlist=["x"]).OpenRouterClient(
                 load_controls(args.controls, {"openrouter": {"model": j[0], "reasoning": {"effort": "low"}}}))), jobs))
     kang = kang_spectrum(material, packet)
     for r in rows:

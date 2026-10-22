@@ -10,12 +10,12 @@ import pytest
 from conftest import load_artifacts
 from toy_framework import write_toy_project
 
-from mofpipe import configuration_model as cm
-from mofpipe import datasets, dft, framework, structures
-from mofpipe.contract import PipelineError, make_record
-from mofpipe.intake import load_project
-from mofpipe.orchestrator import STAGES, run_pipeline
-from mofpipe.store import RunStore
+from qumof import configuration_model as cm
+from qumof import datasets, dft, framework, structures
+from qumof.contract import PipelineError, make_record
+from qumof.intake import load_project
+from qumof.orchestrator import STAGES, run_pipeline
+from qumof.store import RunStore
 
 
 def _state(run_dir):

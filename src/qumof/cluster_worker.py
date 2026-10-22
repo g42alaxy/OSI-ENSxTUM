@@ -8,7 +8,7 @@ Levels (``job["level"]["method"]``), all on the same Mole (geometry, basis, ECP,
   HF             RHF/UHF
   MP2            RMP2/UMP2 on the HF reference
   CCSD, CCSD(T)  RCCSD/UCCSD (+ perturbative triples) on the HF reference
-  active_space   ``mofpipe.active_space.prepare_active_space`` + one ``mofpipe.electronic_solvers`` solver;
+  active_space   ``qumof.active_space.prepare_active_space`` + one ``qumof.electronic_solvers`` solver;
                  the energy is the solver's total energy (E_core included). ``sqd_simulation`` samples the
                  simulated VQE state of the same Hamiltonian and reports both energies (plus exact ED when small)
 Closed shells (spin 0) use restricted references, open shells unrestricted ones. All electrons are correlated.
@@ -50,11 +50,11 @@ def compute(job: dict) -> dict:
         details = {"n_ao": mol.nao_nr(), "n_electrons": int(mol.nelectron), "reference": "U" if open_shell else "R"}
         if method == "active_space":
             sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-            from mofpipe import electronic_solvers
-            from mofpipe.active_space import prepare_active_space
+            from qumof import electronic_solvers
+            from qumof.active_space import prepare_active_space
             system = {"system_id": job["cluster_hash"], "atoms": [[e, *r] for e, r in zip(job["elements"], job["coords_A"])],
                       "unit": "Angstrom", "charge": job["charge"], "spin": job["spin"], "provenance": job.get("provenance")}
-            from mofpipe.contract import PipelineError
+            from qumof.contract import PipelineError
             try:
                 artifact = prepare_active_space(system, {**level["active_space"], "basis": job["basis"], "embedding": "none"})
             except PipelineError as exc:  # e.g. the reference SCF did not converge: a failure, never an energy

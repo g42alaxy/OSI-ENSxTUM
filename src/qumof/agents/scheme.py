@@ -1,7 +1,7 @@
 """OSI scheme view of an agent run: scripted (offline) role policies and the scheme trace.
 
 ``scripted_policies()`` are deterministic, rule-based stand-ins for the four LLM roles, used with ``ReplayClient``
-(``python -m mofpipe agents --scripted``) when no OpenRouter key is available. They read only their input packet,
+(``python -m qumof agents --scripted``) when no OpenRouter key is available. They read only their input packet,
 answer in the same strict schemas and pass through the same application validation as a model's output; they are
 labelled SCRIPTED in the run summary and are not evidence about LLM behaviour.
 

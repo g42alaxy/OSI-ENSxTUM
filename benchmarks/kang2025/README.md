@@ -9,4 +9,4 @@ characteristic lengths (Table S2). `public` is what A2 sees. `reference` is neve
 
 SIOC-COF2 is not included. Its kgm graph could not be reconstructed to reproduce the paper's spectrum.
 
-    PYTHONPATH=src python3 -m mofpipe agents-design-bench --controls controls.yaml --models qwen/qwen3.8-flash --repeats 3
+    PYTHONPATH=src python3 -m qumof agents-design-bench --controls controls.yaml --models qwen/qwen3.8-flash --repeats 3

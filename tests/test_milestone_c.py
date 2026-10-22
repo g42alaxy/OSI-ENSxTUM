@@ -12,11 +12,11 @@ import pytest
 from conftest import load_artifacts
 from toy_framework import write_toy_milestone_c_project
 
-from mofpipe import acquisition, clusters, configuration_model as cm, geometry_match, references, refinement, transfer
-from mofpipe import structures, validation
-from mofpipe.contract import PipelineError, StopReason
-from mofpipe.intake import load_project, validate_project
-from mofpipe.orchestrator import run_pipeline
+from qumof import acquisition, clusters, configuration_model as cm, geometry_match, references, refinement, transfer
+from qumof import structures, validation
+from qumof.contract import PipelineError, StopReason
+from qumof.intake import load_project, validate_project
+from qumof.orchestrator import run_pipeline
 
 
 def _state(run_dir):

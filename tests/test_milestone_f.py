@@ -14,10 +14,10 @@ import pytest
 from conftest import PROJECT, REPO
 from toy_framework import write_toy_milestone_c_project
 
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project
-from mofpipe.orchestrator import run_pipeline
-from mofpipe.store import RunStore
+from qumof.contract import PipelineError
+from qumof.intake import load_project
+from qumof.orchestrator import run_pipeline
+from qumof.store import RunStore
 
 VENV_PYTHON = REPO / ".venv/bin/python"
 ML = {"engine": "orb", "model": "orb-v3-conservative-inf-omat", "dispersion": "D3BJ", "python": sys.executable,
@@ -105,7 +105,7 @@ def test_qaoa_on_fake_brisbane_matches_the_simulator_and_reports_noise(tmp_path)
 
 @pytest.mark.skipif(not _venv_has("aiida") or not (REPO / ".aiida").exists(), reason="needs .venv with aiida and the .aiida profile")
 def test_aiida_engine_reproduces_the_local_engine(tmp_path):
-    out = subprocess.run([str(VENV_PYTHON), "-m", "mofpipe", "run", "--project", str(PROJECT), "--case", "higher_order",
+    out = subprocess.run([str(VENV_PYTHON), "-m", "qumof", "run", "--project", str(PROJECT), "--case", "higher_order",
                           "--correction", "topology_dependent", "--engine", "aiida", "--run-dir", str(tmp_path / "aiida")],
                          capture_output=True, text=True, cwd=REPO, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
     summary = json.loads(out.stdout)

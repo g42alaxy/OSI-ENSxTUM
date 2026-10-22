@@ -11,11 +11,11 @@ import pytest
 from conftest import REPO, load_artifacts
 from toy_framework import write_toy_embedding_project
 
-from mofpipe import embedding
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project, validate_project
-from mofpipe.orchestrator import run_pipeline
-from mofpipe.store import RunStore
+from qumof import embedding
+from qumof.contract import PipelineError
+from qumof.intake import load_project, validate_project
+from qumof.orchestrator import run_pipeline
+from qumof.store import RunStore
 
 BENCHMARK = REPO / "benchmarks/embedding_keto_enol_hf_ccsd.json"
 
@@ -110,7 +110,7 @@ def test_validated_correction_feeds_the_ranking_and_a_constant_correction_change
 
 def test_embedding_benchmark_reproduces_the_independent_full_ccsd(tmp_path):
     pytest.importorskip("pyscf")
-    from mofpipe.__main__ import main
+    from qumof.__main__ import main
     assert main(["embedding-benchmark", "--spec", str(BENCHMARK), "--run-dir", str(tmp_path / "run")]) == 0
     report = load_artifacts(tmp_path / "run", "EmbeddingBenchmarkReport")[0]
     checks, tol = report["checks"], report["tolerance_Ha"]

@@ -83,7 +83,7 @@ def _physical_section(spec, store, ctx, detail) -> dict:
             "dft_fidelity": next((r["base_fidelity"] for r in dft_results), None), "engine_identity": identity,
             "dft_jobs_submitted": store.state["counters"].get("dft_submissions", 0),
             "dft_cache_hits": store.state["counters"].get("dft_cache_hits", 0),
-            "rerun": "python -m mofpipe run --project <project.json> --run-dir <dir>; identical inputs reuse every job"},
+            "rerun": "python -m qumof run --project <project.json> --run-dir <dir>; identical inputs reuse every job"},
         "embedding": _embedding_section(ctx, detail),
         "screening": _screening_section(ctx),
     }

@@ -16,7 +16,7 @@ through gpu4pyscf (``to_gpu``).
 Sign conventions: stress = (1/V) dE/d(strain) (ASE convention; compressed cells have negative diagonal
 stress, pressure = -trace/3). Energies in the result are Hartree; forces eV/A; stress eV/A^3 and kbar.
 
-This file is self-contained (no mofpipe imports) so any interpreter with PySCF can run it.
+This file is self-contained (no qumof imports) so any interpreter with PySCF can run it.
 """
 from __future__ import annotations
 
@@ -394,7 +394,7 @@ def run(job: dict, log) -> dict:
     s, geo = job["settings"], job["geometry"]
     lib.num_threads(int(s["n_threads"]))
     evaluator = Evaluator(s, log)
-    result = {"schema": "mofpipe_pyscf_result_v1", "calculation": job["calculation"], "job_done": False,
+    result = {"schema": "qumof_pyscf_result_v1", "calculation": job["calculation"], "job_done": False,
               "scf_converged": False, "ionic_converged": None, "error": None}
     start = time.perf_counter()
     try:

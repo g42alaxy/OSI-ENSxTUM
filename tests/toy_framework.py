@@ -6,7 +6,7 @@ substitution rule, dummy pseudopotential files and a project spec that drives
 tests/mock_pw.py through the real Quantum ESPRESSO adapter. Nothing here is a
 real MOF, pseudopotential or DFT result; every artifact is labelled SYNTHETIC.
 
-    python tests/toy_framework.py OUT_DIR   # writes OUT_DIR/project.json for `python -m mofpipe run`
+    python tests/toy_framework.py OUT_DIR   # writes OUT_DIR/project.json for `python -m qumof run`
 """
 import copy
 import hashlib

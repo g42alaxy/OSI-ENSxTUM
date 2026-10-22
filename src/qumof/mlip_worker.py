@@ -10,7 +10,7 @@ are energy gradients. ``dispersion: D3BJ`` adds DFT-D3(BJ) for the declared func
 carry none). Relaxation: ASE FIRE (or BFGS) on a FrechetCellFilter (variable cell) or fixed cell, to ``fmax``.
 
 Energies eV per cell; forces eV/A; stress GPa (ASE sign convention).
-This file is self-contained (no mofpipe imports) so any interpreter with the engine can run it.
+This file is self-contained (no qumof imports) so any interpreter with the engine can run it.
 """
 from __future__ import annotations
 

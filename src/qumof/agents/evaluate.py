@@ -1,7 +1,7 @@
 """Milestone F evaluation: agent-assisted runs against the deterministic baseline at equal scientific budget.
 
 For each (case, correction) the deterministic pipeline and the agent run use the same project, evaluator and
-solver settings. Measured per pair (instructions/10, "Agent evaluation"): completion, agreement of the final
+solver settings. Measured per pair: completion, agreement of the final
 ranking with the baseline, harness acceptance on the fixture (the ``no_runtime_agents`` check excluded for the
 agent run), topologies kept by A1, invalid model outputs, LLM requests, tokens, cost, evaluator submissions
 (duplicated jobs) and wall time. Fluent assessments are not a metric.

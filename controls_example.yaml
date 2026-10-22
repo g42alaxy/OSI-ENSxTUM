@@ -16,7 +16,7 @@ openrouter:
     # order: [alibaba]                 # pin providers if you want
     # data_collection: deny            # only providers that do not retain prompts
   app_url: ""                          # optional HTTP-Referer for OpenRouter app attribution
-  app_title: mofpipe-agents            # optional X-Title
+  app_title: qumof-agents            # optional X-Title
   timeout_s: [10, 120]                 # connect, per-read
   deadline_s: 600                      # hard wall-clock limit per request (keep-alive bytes do not extend it)
   max_tokens:                          # per role, visible output plus reasoning (flash used ~3.7k reasoning on A1)
@@ -56,7 +56,7 @@ literature:                            # runs as ordinary software before A67; n
   max_sources: 12
   max_passages: 40
   max_passage_chars: 1200
-  # Benchmark shorthand resolved to specific papers before any comparison (instructions/SOURCES.md).
+  # Benchmark shorthand resolved to specific papers before any comparison.
   # A title is accepted only on a DOI match or a near-identical title; otherwise it is reported unresolved.
   references:
     - {alias: Kang, title: "Quantum Computing Based Design of Multivariate Porous Materials", doi: 10.1021/acscentsci.5c00918}
@@ -65,7 +65,7 @@ literature:                            # runs as ordinary software before A67; n
     - {alias: multi-scale embedded MOF energetics, arxiv_id: "2505.04527"}
   extra_queries: []                    # added to the deterministic query templates
 
-# Reference datasets for A67, read from local pinned copies (download once: `python -m mofpipe datasets-fetch`).
+# Reference datasets for A67, read from local pinned copies (download once: `python -m qumof datasets-fetch`).
 # Matching and metrics are code: pinned records (e.g. a CSD refcode) are the specific material; other matches share
 # net + element set ("same_family"). Only intensive quantities are compared (density, LCD, PLD); dataset energies
 # come from other DFT protocols and are never compared with pipeline energies. Not used for synthetic fixtures.

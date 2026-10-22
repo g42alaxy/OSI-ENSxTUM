@@ -1,4 +1,4 @@
-"""Shared contract (instructions/00_SHARED_CONTRACT.md).
+"""Shared contract.
 
 One status vocabulary, typed error codes, content hashing and record helpers
 used across every module boundary.

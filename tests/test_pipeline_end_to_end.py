@@ -4,7 +4,7 @@ import json
 import pytest
 from conftest import CASES, MODES
 
-from mofpipe.acceptance import check_run
+from qumof.acceptance import check_run
 
 
 @pytest.mark.parametrize("case", CASES)

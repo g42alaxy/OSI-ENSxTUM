@@ -5,10 +5,10 @@ from itertools import product
 import pytest
 from conftest import PROJECT, fixture_core, harness_json
 
-from mofpipe import configuration_model as cm
-from mofpipe import datasets, encoding, optimization
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project
+from qumof import configuration_model as cm
+from qumof import datasets, encoding, optimization
+from qumof.contract import PipelineError
+from qumof.intake import load_project
 
 EXPECTED = harness_json("harness/expected_results.json")
 

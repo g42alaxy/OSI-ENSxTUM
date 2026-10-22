@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mofpipe"
+name = "qumof"
 version = "0.2.0"
 description = "Deterministic MOF arrangement/topology ranking pipeline with optional A1/A2/A67 runtime agents"
 requires-python = ">=3.10"
@@ -19,7 +19,7 @@ dependencies = [
 test = ["pytest>=7"]
 # protocols.dft.device = "gpu": pick the gpu4pyscf wheel matching the installed CUDA toolkit (cuda11x/cuda12x/...).
 gpu = ["gpu4pyscf-cuda12x>=1.8"]
-# Runtime agents (python -m mofpipe agents): OpenRouter requests, strict schemas, controls.yaml, LangGraph
+# Runtime agents (python -m qumof agents): OpenRouter requests, strict schemas, controls.yaml, LangGraph
 # orchestration, Valency MCP client, local PDF text and the reference datasets (parquet + HDF5, Hugging Face). The deterministic pipeline never imports these.
 agents = ["requests>=2.31", "jsonschema>=4.21", "pyyaml>=6", "langgraph>=0.4", "mcp>=1.9", "pypdf>=4",
           "pandas>=2", "pyarrow>=14", "h5py>=3.9", "huggingface_hub>=0.23"]

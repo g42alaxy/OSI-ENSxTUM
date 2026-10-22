@@ -1,4 +1,4 @@
-"""Task 10 (T10.1): AiiDA engine for the pipeline (``runtime.engine: aiida`` / ``mofpipe run --engine aiida``).
+"""Task 10 (T10.1): AiiDA engine for the pipeline (``runtime.engine: aiida`` / ``qumof run --engine aiida``).
 
 ``MofPipeWorkChain`` steps through the stages in order. Each step runs the stage with the same interfaces as the
 local engine (``Pipeline.run(stop_after=stage)``: committed stages are reused, the next one is computed and
@@ -24,17 +24,17 @@ from aiida.orm import Dict, Int, Str
 
 from .contract import PipelineError
 
-DEFAULT_PROFILE = "mofpipe"
+DEFAULT_PROFILE = "qumof"
 
 
 def load_aiida(profile: str | None = None):
-    """Load the AiiDA profile (default ``mofpipe``). AIIDA_PATH must be set before aiida is imported (__main__)."""
+    """Load the AiiDA profile (default ``qumof``). AIIDA_PATH must be set before aiida is imported (__main__)."""
     import aiida
     try:
         return aiida.load_profile(profile or DEFAULT_PROFILE, allow_switch=True)
     except Exception as exc:  # missing profile or storage
         raise PipelineError("BACKEND_UNAVAILABLE", f"AiiDA profile {profile or DEFAULT_PROFILE}: {exc} "
-                                                   f"(create it with: AIIDA_PATH=.aiida verdi presto --profile-name mofpipe)") from exc
+                                                   f"(create it with: AIIDA_PATH=.aiida verdi presto --profile-name qumof)") from exc
 
 
 @calcfunction

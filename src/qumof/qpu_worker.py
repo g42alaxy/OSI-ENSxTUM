@@ -10,7 +10,7 @@ then the circuit is transpiled for the device and sampled with its noise model (
 
 Bit order: qubit i is slot i; Qiskit count strings put qubit n-1 first. Fake devices are calibration snapshots of
 real IBM devices simulated locally: noisy simulation, not hardware execution.
-This file is self-contained (no mofpipe imports) so any interpreter with qiskit, qiskit-aer and
+This file is self-contained (no qumof imports) so any interpreter with qiskit, qiskit-aer and
 qiskit-ibm-runtime can run it.
 """
 from __future__ import annotations

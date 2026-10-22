@@ -18,10 +18,10 @@ pytest.importorskip("jsonschema")
 from conftest import REPO  # noqa: E402
 from toy_framework import embedding_protocol, write_toy_milestone_c_project  # noqa: E402
 
-from mofpipe.agents.client import ReplayClient  # noqa: E402
-from mofpipe.agents.controls import load_controls  # noqa: E402
-from mofpipe.agents.runner import AgentRun  # noqa: E402
-from mofpipe.agents.scheme import scheme_trace, scripted_policies  # noqa: E402
+from qumof.agents.client import ReplayClient  # noqa: E402
+from qumof.agents.controls import load_controls  # noqa: E402
+from qumof.agents.runner import AgentRun  # noqa: E402
+from qumof.agents.scheme import scheme_trace, scripted_policies  # noqa: E402
 
 ML = {"engine": "orb", "model": "orb-v3-conservative-inf-omat", "dispersion": "D3BJ", "python": sys.executable,
       "worker": "tools/mock_mlip.py", "relaxation": {"optimizer": "FIRE", "fmax_eV_per_A": 0.05, "max_steps": 300,
@@ -103,7 +103,7 @@ def test_a4_revises_an_inadequate_hamiltonian_and_the_second_pass_succeeds(tmp_p
     """Fixture higher_order: A2 proposes pair models only, fitting fails (MODEL_INADEQUATE); A4 revises to the
     untried triplet model; the pipeline re-runs from fitting and completes with it."""
     from conftest import PROJECT
-    from mofpipe.agents.scheme import scripted_a1, scripted_a4, scripted_a67
+    from qumof.agents.scheme import scripted_a1, scripted_a4, scripted_a67
 
     def pairs_only(packet):
         return {"status": "OK", "missing_input_ids": [], "error_codes": [], "topologies": [

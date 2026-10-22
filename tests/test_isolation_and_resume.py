@@ -6,9 +6,9 @@ import sys
 import pytest
 from conftest import FIXTURE, PROJECT
 
-from mofpipe.contract import PipelineError
-from mofpipe.intake import load_project
-from mofpipe.orchestrator import STAGES, run_pipeline
+from qumof.contract import PipelineError
+from qumof.intake import load_project
+from qumof.orchestrator import STAGES, run_pipeline
 
 _events = None
 
@@ -91,7 +91,7 @@ def test_relative_run_dir(tmp_path, monkeypatch):
 
 def test_acceptance_reports_failure_instead_of_crashing(tmp_path):
     from conftest import copy_fixture
-    from mofpipe.acceptance import check_run
+    from qumof.acceptance import check_run
     root = copy_fixture(tmp_path / "fx", with_harness=True)
     (root / "tools/mock_evaluator.py").write_text("import sys\nsys.exit('backend crashed')\n")
     spec = load_project(root / "project.json")

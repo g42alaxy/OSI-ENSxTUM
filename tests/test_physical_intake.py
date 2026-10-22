@@ -10,15 +10,15 @@ import pytest
 from conftest import FIXTURE, PROJECT, REPO
 from toy_framework import toy_cif, write_toy_project
 
-from mofpipe import structures
-from mofpipe.cif import parse_cif, write_cif
-from mofpipe.contract import PipelineError
-from mofpipe.framework import build_framework
-from mofpipe.intake import load_project, validate_project
-from mofpipe.orchestrator import run_pipeline
-from mofpipe.project_spec import REQUIRED_FIELDS, parse_formula
+from qumof import structures
+from qumof.cif import parse_cif, write_cif
+from qumof.contract import PipelineError
+from qumof.framework import build_framework
+from qumof.intake import load_project, validate_project
+from qumof.orchestrator import run_pipeline
+from qumof.project_spec import REQUIRED_FIELDS, parse_formula
 
-TEMPLATE = REPO / "instructions/project_spec.template.json"
+TEMPLATE = REPO / "project_spec.template.json"
 RECIPE = FIXTURE / "physical_case/recipe.json"
 
 

@@ -1,7 +1,7 @@
 """Task 01 (topology search): PORMAKE net search and parent-framework construction (one job per process).
 
 Run by ``topology_builders.generate_topologies`` as ``PYTHON pormake_worker.py job.json`` inside the job directory;
-writes ``result.json`` and one ``<net>.cif`` per built parent framework. Self-contained (no mofpipe imports), so
+writes ``result.json`` and one ``<net>.cif`` per built parent framework. Self-contained (no qumof imports), so
 any interpreter with ``pormake`` can run it.
 
 1. Candidate nets: the declared list, or every RCSR net in PORMAKE's database whose NODE lines all have the node

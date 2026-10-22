@@ -5,10 +5,10 @@ from fractions import Fraction
 import pytest
 from conftest import FIXTURE, PROJECT, copy_fixture, harness_json, read_jsonl
 
-from mofpipe import configuration_model as cm
-from mofpipe import datasets, structures
-from mofpipe.intake import load_project
-from mofpipe.orchestrator import run_pipeline
+from qumof import configuration_model as cm
+from qumof import datasets, structures
+from qumof.intake import load_project
+from qumof.orchestrator import run_pipeline
 
 EXPECTED = harness_json("harness/expected_results.json")
 

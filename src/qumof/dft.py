@@ -133,7 +133,7 @@ class QuantumEspressoAdapter:
         # pw.x tests every Cartesian component against forc_conv_thr; tol/sqrt(3) per component guarantees
         # the residual force norm checked in collect() is within the declared tolerance.
         force_ry = tolerances["force_tolerance_eV_per_angstrom"] / math.sqrt(3) / RY_PER_BOHR_TO_EV_PER_A
-        control = [f"calculation = '{calculation}'", "prefix = 'mofpipe'", f"pseudo_dir = '{pseudo_dir}'",
+        control = [f"calculation = '{calculation}'", "prefix = 'qumof'", f"pseudo_dir = '{pseudo_dir}'",
                    "outdir = './tmp'", "tprnfor = .true.", "tstress = .true.", f"forc_conv_thr = {force_ry:.6e}"]
         electrons = [f"conv_thr = {protocol['conv_thr_Ry']}"] + [f"{k} = {v!r}" if isinstance(v, str) else f"{k} = {v}"
                                                                  for k, v in sorted(numerics.items())]
@@ -333,7 +333,7 @@ class PySCFAdapter:
 
     def write_input(self, geometry: dict, protocol: dict, tolerances: dict, calculation: str, magnetic_state: dict,
                     numerics: dict, overrides=None, pseudo_dir: str = ".", properties=ALL_PROPERTIES, backend=None) -> str:
-        job = {"schema": "mofpipe_pyscf_job_v1", "calculation": calculation,
+        job = {"schema": "qumof_pyscf_job_v1", "calculation": calculation,
                "geometry": {k: geometry[k] for k in ("lattice_A", "elements", "frac_coords")},
                "settings": self.settings(backend, geometry, calculation, magnetic_state, numerics, overrides or {},
                                          properties)}

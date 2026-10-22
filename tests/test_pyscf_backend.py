@@ -5,7 +5,7 @@ PySCF + D3 calculation, analytic forces and stress (DFT + D3) equal finite diffe
 equals the replicated cell at the folded k-mesh, smearing conventions, relaxations reach the declared
 tolerances, and SCF failure is reported without an energy. Backend checks (intake validation, engine probe,
 fidelity, GPU switch) need no SCF. The full pipeline on the SYNTHETIC formate toy is opt-in:
-MOFPIPE_SLOW_TESTS=1.
+QUMOF_SLOW_TESTS=1.
 """
 import json
 import os
@@ -20,10 +20,10 @@ pytestmark = pytest.mark.pyscf
 import numpy as np  # noqa: E402
 from pyscf_toy import write_pyscf_toy_project  # noqa: E402
 
-from mofpipe import dft, pyscf_worker as worker  # noqa: E402
-from mofpipe.intake import load_project, validate_project  # noqa: E402
-from mofpipe.orchestrator import run_pipeline  # noqa: E402
-from mofpipe.store import RunStore  # noqa: E402
+from qumof import dft, pyscf_worker as worker  # noqa: E402
+from qumof.intake import load_project, validate_project  # noqa: E402
+from qumof.orchestrator import run_pipeline  # noqa: E402
+from qumof.store import RunStore  # noqa: E402
 
 SI_A = 5.43
 SI_LATTICE = [[0.0, SI_A / 2, SI_A / 2], [SI_A / 2, 0.0, SI_A / 2], [SI_A / 2, SI_A / 2, 0.0]]
@@ -228,7 +228,7 @@ def test_pyscf_job_input_carries_every_scientific_setting(tmp_path):
     assert s["compute_stress"] is False and s["energy_convention"] == "free_energy"
 
 
-@pytest.mark.skipif(os.environ.get("MOFPIPE_SLOW_TESTS") != "1", reason="real DFT on the formate toy (~10 min on 10 CPU cores)")
+@pytest.mark.skipif(os.environ.get("QUMOF_SLOW_TESTS") != "1", reason="real DFT on the formate toy (~10 min on 10 CPU cores)")
 def test_pyscf_physical_pipeline_end_to_end(tmp_path):
     """With the shipped 20/25/30 Ha series the energy difference is not converged (grid error of the hard O/F GTH
     pseudopotentials), so the run must stop at labels with DFT_SETTINGS_NOT_CONVERGED; with a converged cutoff it

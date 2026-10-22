@@ -11,15 +11,15 @@ pytest.importorskip("yaml")
 
 from conftest import PROJECT, REPO  # noqa: E402
 
-from mofpipe.agents import client as client_mod  # noqa: E402
-from mofpipe.agents import packets  # noqa: E402
-from mofpipe.agents.client import AgentCallError, ReplayClient, check_schema  # noqa: E402
-from mofpipe.agents.controls import load_controls  # noqa: E402
-from mofpipe.agents.literature import LocalPapers, gather_evidence  # noqa: E402
-from mofpipe.agents.runner import AgentRun  # noqa: E402
-from mofpipe.agents.validate import _allowed_verdicts, validate_assessment, validate_hamiltonian_proposal  # noqa: E402
-from mofpipe.intake import load_project, validate_project  # noqa: E402
-from mofpipe.orchestrator import run_pipeline  # noqa: E402
+from qumof.agents import client as client_mod  # noqa: E402
+from qumof.agents import packets  # noqa: E402
+from qumof.agents.client import AgentCallError, ReplayClient, check_schema  # noqa: E402
+from qumof.agents.controls import load_controls  # noqa: E402
+from qumof.agents.literature import LocalPapers, gather_evidence  # noqa: E402
+from qumof.agents.runner import AgentRun  # noqa: E402
+from qumof.agents.validate import _allowed_verdicts, validate_assessment, validate_hamiltonian_proposal  # noqa: E402
+from qumof.intake import load_project, validate_project  # noqa: E402
+from qumof.orchestrator import run_pipeline  # noqa: E402
 
 TOPOLOGIES = ("ring12", "prism6")
 COUNTS = [{"species_id": "A", "count": 6}, {"species_id": "B", "count": 6}]
@@ -215,7 +215,7 @@ def test_a1_selects_topologies_from_the_brief_and_the_pipeline_analyses_only_tho
 
 
 def test_reference_datasets_match_by_code_and_feed_direct_comparisons(tmp_path):
-    from mofpipe.agents.datasets import ReferenceDataset, match_score
+    from qumof.agents.datasets import ReferenceDataset, match_score
     table = tmp_path / "refs.csv"
     table.write_text("id,name,formula,topology,density,lcd\nr1,SAHYIK,Zn4C24H12O13,pcu,0.59,15.1\n"
                      "r2,OTHER,Cu3C18H6O12,tbo,0.88,13.2\nr3,ZNDIA,Zn2C8H4O4,dia,1.1,\n")
@@ -242,7 +242,7 @@ def test_reference_datasets_match_by_code_and_feed_direct_comparisons(tmp_path):
 
 
 def gather_datasets_for_fixture_is_not_applicable():
-    from mofpipe.agents.datasets import gather_datasets
+    from qumof.agents.datasets import gather_datasets
     out = gather_datasets(load_project(PROJECT), controls(Path(".")), {}, None, [])
     return out["records"] == [] and out["gaps"][0]["code"] == "DATASET_NOT_APPLICABLE"
 
@@ -363,8 +363,8 @@ def test_agent_plan_requires_the_agent_policy():
 
 
 def test_deterministic_pipeline_never_imports_the_agent_layer():
-    code = ("import sys; from mofpipe.orchestrator import run_pipeline; import mofpipe.__main__; "
-            "print(any(m.startswith('mofpipe.agents') for m in sys.modules))")
+    code = ("import sys; from qumof.orchestrator import run_pipeline; import qumof.__main__; "
+            "print(any(m.startswith('qumof.agents') for m in sys.modules))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=REPO,
                          env={"PYTHONPATH": str(REPO / "src")}, check=True)
     assert out.stdout.strip() == "False"

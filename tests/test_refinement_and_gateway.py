@@ -4,9 +4,9 @@ import json
 import pytest
 from conftest import PROJECT, copy_fixture, read_jsonl
 
-from mofpipe.gateway import review_proposal
-from mofpipe.intake import load_project
-from mofpipe.orchestrator import Pipeline, run_pipeline
+from qumof.gateway import review_proposal
+from qumof.intake import load_project
+from qumof.orchestrator import Pipeline, run_pipeline
 
 
 def _small_training_fixture(tmp_path, case, per_topology, models=None):

@@ -1,4 +1,4 @@
-"""controls.yaml: API keys, model, budgets, cache, MCP servers and literature settings for ``mofpipe agents``.
+"""controls.yaml: API keys, model, budgets, cache, MCP servers and literature settings for ``qumof agents``.
 
 Secrets live only here or in the environment (OPENROUTER_API_KEY, OPENROUTER_MODEL, VALENCY_API_TOKEN, which
 fill empty fields). They are never written to prompts, ledgers, artifacts or logs: ``Controls.public()`` is the
@@ -15,7 +15,7 @@ from ..contract import PipelineError
 DEFAULTS = {
     "openrouter": {
         "api_key": "", "base_url": "https://openrouter.ai/api/v1", "model": "",
-        "temperature": 0, "reasoning": None, "provider": {}, "app_url": "", "app_title": "mofpipe-agents",
+        "temperature": 0, "reasoning": None, "provider": {}, "app_url": "", "app_title": "qumof-agents",
         "timeout_s": [10, 120], "deadline_s": 600, "max_tokens": {"A1": 8000, "A2": 32000, "A67": 24000, "A4": 16000},
     },
     # max_llm_requests = normal requests: A1, A2, A67 (+ A4 and, per Hamiltonian revision, A67 + A4 again).

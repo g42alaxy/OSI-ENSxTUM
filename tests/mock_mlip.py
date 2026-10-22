@@ -1,4 +1,4 @@
-"""Mock ML-potential worker (same JSON protocol as src/mofpipe/mlip_worker.py) for tests without torch.
+"""Mock ML-potential worker (same JSON protocol as src/qumof/mlip_worker.py) for tests without torch.
 
 Energy (eV/cell): fixed per-element terms, minus 0.05 eV for every N-N pair closer than 4.5 A (a deterministic
 ordering preference), plus ``MOCK_MLIP_SHIFT`` eV per atom for structures of topology ``MOCK_MLIP_SHIFT_TOPOLOGY``

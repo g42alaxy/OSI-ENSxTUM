@@ -1,4 +1,4 @@
-"""CLI: python -m mofpipe {run,accept,matrix} --project mof_no_agent_fixture/project.json
+"""CLI: python -m qumof {run,accept,matrix} --project mof_no_agent_fixture/project.json
 
 ``run`` also accepts a ProjectSpec v0.1 file or a physical_case recipe (physical projects).
 ``electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir DIR`` runs Task 07 solvers.
@@ -108,7 +108,7 @@ def _agents(args) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="mofpipe")
+    parser = argparse.ArgumentParser(prog="qumof")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("run", "accept"):
         p = sub.add_parser(name)
