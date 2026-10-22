@@ -1,4 +1,4 @@
-# QuMOF: quantum-enhanced modelling of multivariate MOFs
+# QuMOF: LLM-assisted energy-grounded quantum–classical design of multivariate MOFs
 
 <div align="center">
   
