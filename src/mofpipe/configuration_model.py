@@ -73,6 +73,14 @@ def model_features(spec, topo, model) -> list:
     return [spec.feature_order[i] for i in model["feature_indices"]]
 
 
+def candidate_models(spec, topo) -> list:
+    """The model grid fitted for one topology: every declared candidate, or the validated A2 proposal's subset."""
+    grid = ((spec.agent_plan or {}).get("model_grid") or {}).get(topo.topology_id)
+    if grid is None:
+        return list(spec.model_candidates)
+    return [m for m in spec.model_candidates if m["id"] in grid]
+
+
 def all_model_features(spec, topo) -> list:
     names = []
     for model in spec.model_candidates:
@@ -192,7 +200,7 @@ def fit_and_select(spec, topo, train: dict, dev: dict) -> dict:
     tr = [e for e in train["entries"] if e["topology_id"] == topo.topology_id]
     dv = [e for e in dev["entries"] if e["topology_id"] == topo.topology_id]
     results = []
-    for model in spec.model_candidates:
+    for model in candidate_models(spec, topo):
         names = model_features(spec, topo, model)
         base = {"model_id": model["id"], "features": names, "n_parameters": len(names),
                 "polynomial_degree": max(feature_degree(n) for n in names)}
@@ -338,7 +346,7 @@ def fit_and_select_grouped(spec, topo, train: dict, groups: dict) -> dict:
     if len(set(folds.values())) < 2:
         raise PipelineError("INSUFFICIENT_GROUPS_FOR_CV", f"{topo.topology_id}: {len(set(entry_groups))} groups")
     results = []
-    for model in spec.model_candidates:
+    for model in candidate_models(spec, topo):
         names = model_features(spec, topo, model)
         x_all = [feature_vector(topo, e["bits"], names) for e in entries]
         kept, dropped = independent_columns(x_all, names)

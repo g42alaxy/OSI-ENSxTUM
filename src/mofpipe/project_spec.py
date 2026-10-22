@@ -43,8 +43,6 @@ REQUIRED_FIELDS = (
 )
 NOT_YET_SUPPORTED = {  # field -> (code, task) when set to a non-empty value
     "search.orientation_catalog_id": ("UNSUPPORTED_ORIENTATION_CATALOG", "T01.4"),
-    "protocols.ml_potential_checkpoint": ("UNSUPPORTED_ML_POTENTIAL", "T02.2"),
-    "protocols.ml_calibration": ("UNSUPPORTED_ML_POTENTIAL", "T02.3"),
     # protocols.embedding (Milestone E) is validated by embedding.protocol_errors; an embedded cluster active space
     # is declared inside it (high_level.active_space). A stand-alone MOF active-space protocol is not implemented.
     "protocols.active_space": ("UNSUPPORTED_ELECTRONIC_BACKEND", "T07.1"),
@@ -255,11 +253,19 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
             "retain_HUBO_or_explicitly_reject", "quadratize"):
         errors.append(_err("UNSUPPORTED_ENCODING_POLICY", "protocols.encoding.higher_order",
                            str(protocols["encoding"]["higher_order"])))
+    if protocols.get("ml_potential_checkpoint") is not None:  # Task 02 screening (mlip.py, screening.py)
+        from .mlip import protocol_errors as ml_errors
+        from .screening import policy_errors
+        errors += [_err(code, field) for code, field in ml_errors(protocols["ml_potential_checkpoint"])]
+        errors += [_err(code, field) for code, field in policy_errors(protocols.get("screening"), protocols.get("ml_calibration"))]
+    elif protocols.get("ml_calibration") or protocols.get("screening"):
+        errors.append(_err("SCIENTIFIC_SPEC_MISSING", "protocols.ml_potential_checkpoint",
+                           "ml_calibration/screening need a declared ML potential"))
     if protocols.get("embedding"):
         from .embedding import protocol_errors as embedding_errors
         errors += [_err(code, path, detail) for code, path, detail in
                    embedding_errors(protocols["embedding"], protocols.get("dft") or {}, config.get("budgets") or {}, root)]
-    if (config.get("runtime") or {}).get("engine") not in (None, "local", "aiida_recommended"):
+    if (config.get("runtime") or {}).get("engine") not in (None, "local", "aiida", "aiida_recommended"):
         errors.append(_err("UNSUPPORTED_WORKFLOW_ENGINE", "runtime.engine", str(config["runtime"]["engine"])))
 
     blocks = {b["id"]: b for b in config.get("building_blocks") or [] if b.get("id")}
@@ -491,6 +497,10 @@ def validate_physical_project(spec) -> dict:
                 checks += local_checks
                 errors += [e for e in local_errors if e["code"] != "INVALID_SITE_COUNT"]
         checks.append({"check": "topologies", "passed": len(spec.topologies) >= 1})
+    from .intake import runtime_agent_errors
+    agent_errors = runtime_agent_errors(spec)
+    checks.append({"check": "runtime_agents", "passed": not agent_errors})
+    errors += [_err(code, "runtime_agents", detail) for code, detail in agent_errors]
     status = StageStatus.COMPLETED if not errors else StageStatus.BLOCKED
     return make_record("ValidationReport", spec.provenance, scope="project", project_id=spec.project_id,
                        project_type=spec.project_type, status=status.value, n_checks=len(checks), checks=checks,

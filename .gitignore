@@ -5,3 +5,6 @@ __pycache__/
 runs/
 .venv
 .DS_Store
+controls.yaml
+data/reference/
+.aiida/

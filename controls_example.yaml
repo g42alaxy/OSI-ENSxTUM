@@ -1,0 +1,110 @@
+openrouter:
+  api_key: ""                          # https://openrouter.ai/settings/keys  (sk-or-v1-...)
+  base_url: https://openrouter.ai/api/v1
+  # Qwen 3.8 on OpenRouter with structured-output (json_schema) support, checked 22 Oct 2026:
+  #   qwen/qwen3.8-max-0902   ($2 / $6 per M tokens in/out)      default: strongest reviewer for A67
+  #   qwen/qwen3.8-flash      ($0.15 / $0.47)                    cheap; fine for A1/A2 on the fixture
+  #   qwen/qwen3.8-27b, qwen/qwen3.8-max-prime, qwen/qwen3.8-2.4t-a95b
+  # `agents-check` confirms the model is listed and supports structured outputs.
+  model: qwen/qwen3.8-flash
+  temperature: 0
+  # Qwen 3.8 models reason before answering; reasoning tokens count toward max_tokens. Leave null for the
+  # provider default, or e.g. {effort: low} / {enabled: false}. Truncated JSON is a failed request.
+  reasoning: null
+  provider:                            # OpenRouter provider routing; require_parameters is always forced true
+    allow_fallbacks: true
+    # order: [alibaba]                 # pin providers if you want
+    # data_collection: deny            # only providers that do not retain prompts
+  app_url: ""                          # optional HTTP-Referer for OpenRouter app attribution
+  app_title: mofpipe-agents            # optional X-Title
+  timeout_s: [10, 300]                 # connect, read
+  max_tokens:                          # per role, visible output plus reasoning (flash used ~3.7k reasoning on A1)
+    A1: 8000
+    A2: 10000
+    A67: 24000
+
+budget:
+  max_llm_requests: 3                  # one per role (A1, A2, A67); fixed by the design
+  allow_extra_request: true            # the single optional request per run: repair one invalid output or
+                                       # retry one transient failure
+  allow_model_expansion: false         # if true, that extra request may instead re-ask A2 for a new model family
+                                       # after MODEL_INADEQUATE (the Hamiltonian update loop; off for now)
+
+selection:                             # A1 decides which catalogue topologies to analyse from the design brief
+  allow_scope_exclusions: true         # false: A1 must select every feasible topology (exclusions only on facts)
+
+cache:
+  enabled: true                        # identical packet + prompt/contract version + model config = no new request
+  dir: runs/.agent_cache
+
+orchestration:
+  engine: auto                         # auto (LangGraph if installed) | langgraph | sequential
+
+mcp:
+  valency:                             # https://docs.valency.io/ — scholarly search over 500M+ papers
+    enabled: true
+    url: https://mcp.valency.io/       # streamable HTTP; keep the trailing slash
+    api_token: ""                      # Valency app -> Settings -> API token (sent as Authorization: Bearer)
+    timeout_s: 60
+
+literature:                            # runs as ordinary software before A67; no extra LLM requests
+  enabled: true
+  local_papers_dir: ""                 # e.g. papers/ : .pdf / .txt / .md, optional <name>.json sidecar
+                                       # {"title", "authors", "year", "doi", "url"}; scanned PDFs need OCR first
+  results_per_query: 5
+  max_sources: 12
+  max_passages: 40
+  max_passage_chars: 1200
+  # Benchmark shorthand resolved to specific papers before any comparison (instructions/SOURCES.md).
+  # A title is accepted only on a DOI match or a near-identical title; otherwise it is reported unresolved.
+  references:
+    - {alias: Kang, title: "Quantum Computing Based Design of Multivariate Porous Materials", doi: 10.1021/acscentsci.5c00918}
+    - {alias: Cai tbo/fmj, title: "Control of Metal–Organic Framework Crystal Topology by Ligand Functionalization", doi: 10.1021/cg501285q}
+    - {alias: Fe–MOF-74 (Rocca et al.), arxiv_id: "2510.02550"}
+    - {alias: multi-scale embedded MOF energetics, arxiv_id: "2505.04527"}
+  extra_queries: []                    # added to the deterministic query templates
+
+# Reference datasets for A67, read from local pinned copies (download once: `python -m mofpipe datasets-fetch`).
+# Matching and metrics are code: pinned records (e.g. a CSD refcode) are the specific material; other matches share
+# net + element set ("same_family"). Only intensive quantities are compared (density, LCD, PLD); dataset energies
+# come from other DFT protocols and are never compared with pipeline energies. Not used for synthetic fixtures.
+datasets:
+  - id: core-mof-2024-asr              # experimental structures (all solvent removed), Zeo++ descriptors, topology labels
+    enabled: true                      # fetched 2026-10-22 (datasets-fetch)
+    kind: experimental_structure
+    version: "CoRE MOF 2024 v1.1 (HF materials-toolkits)"
+    license: CC-BY-4.0
+    format: materials_toolkits
+    index: data/reference/core-mof-2024/asr_index.parquet
+    hdf5: data/reference/core-mof-2024/asr.hdf5
+    sha256: {index: db4b1002872da6fc82b52e1a8d488a0fbbb34e54453a2d588b6ed0183ac83aa9,
+             hdf5: 3f06a529e815d4274e0d955d6c26760504d1417a4d87902735531744125943d8}
+    hf: {repo: materials-toolkits/core-mof-2024, revision: a756bea571963ccdb76f31f3eeaad116eab955c5,
+         files: [asr_index.parquet, asr.hdf5]}
+    columns: {record_id: coreid, name: refcode, topology: topology, metals: metals, doi: doi}
+    pinned: []                         # record IDs / refcodes of the exact material, if present
+    min_score: 3
+    max_records: 5
+  - id: qmof-v18                       # PBE-D3(BJ)-relaxed structures; topology only via MOFid
+    enabled: true                      # fetched 2026-10-22 (datasets-fetch)
+    kind: dft_relaxed_structure
+    version: "QMOF v18 (HF materials-toolkits)"
+    license: CC-BY-4.0
+    format: materials_toolkits
+    index: data/reference/qmof/all_index.parquet
+    hdf5: data/reference/qmof/all.hdf5
+    sha256: {index: edad9eeb6261e4aec444a2369d6a977b4148149b32a5b17134e7a25e34a801e0,
+             hdf5: 628f503e2c87dbbb256b282b7d189d1708c778ba94f8aa147dd87c2250d244d0}
+    hf: {repo: materials-toolkits/qmof, revision: b670927c08811c1f198c2c89b5d3799d3193da60,
+         files: [all_index.parquet, all.hdf5]}
+    columns: {record_id: qmof_id, name: name, formula: formula, mofid: mofid, doi: doi}
+    pinned: []
+    min_score: 3
+    max_records: 5
+
+assessment:
+  top_k_candidates: 5
+  # Physical runs: a candidate can be PASS_CHECKED_CRITERIA only if all of these checks completed.
+  # null = post_relaxation_slot_mapping, residual_force_stress, min_interatomic_distance, metal_coordination,
+  #        mofchecker, crystalnets_topology
+  required_checks: null

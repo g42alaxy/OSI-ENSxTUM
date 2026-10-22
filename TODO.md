@@ -33,9 +33,9 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 | T01.3 | 01 | Atomic framework construction | [framework.py:571](src/mofpipe/framework.py#L571) | **Done (B)**; PORMAKE wiring open |
 | T01.4 | 01 | Linker orientation states | [structures.py:77](src/mofpipe/structures.py#L77) | open |
 | T01.5 | 01/05 | Supercells and periodic translations | [structures.py:91](src/mofpipe/structures.py#L91) | **Done (C)** for diagonal supercells; non-diagonal open |
-| T02.1 | 02 | Seed decoration generation | [structures.py:159](src/mofpipe/structures.py#L159) | open |
-| T02.2 | 02 | ML-potential relaxation | [structures.py:160](src/mofpipe/structures.py#L160) | open |
-| T02.3 | 02 | ML calibration against DFT and screening decisions | [structures.py:162](src/mofpipe/structures.py#L162) | open |
+| T02.1 | 02 | Seed decoration generation | [screening.py](src/mofpipe/screening.py) | **Done (F)**; orientation diversity needs T01.4 |
+| T02.2 | 02 | ML-potential relaxation | [mlip.py](src/mofpipe/mlip.py), [mlip_worker.py](src/mofpipe/mlip_worker.py) | **Done (F)**: orb-v3 + D3(BJ) |
+| T02.3 | 02 | ML calibration against DFT and screening decisions | [screening.py](src/mofpipe/screening.py) | **Done (F)**; real-DFT calibration of orb on MOF-5 not run |
 | T03.1 | 03 | Cluster-feature generation from the slot lattice | [configuration_model.py:17](src/mofpipe/configuration_model.py#L17) | **Done (C)** for point/pair orbits; triplets, orientation open |
 | T03.2 | 03 | Model validation for real (noisy) data | — | **Done (B)**; transfer metric added (C) |
 | T03.3 | 03 | Uncertainty calibration and multifidelity models | [configuration_model.py:325](src/mofpipe/configuration_model.py#L325) | open |
@@ -43,7 +43,7 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 | T03.5 | 03/04 | Multicomponent encodings and penalty bounds | [intake.py:292](src/mofpipe/intake.py#L292) | **Done (D)** at the encoding layer; pipeline-wide multicomponent open |
 | T04.1 | 04 | Exact solver for large cells | [optimization.py:92](src/mofpipe/optimization.py#L92) | **Done (D)**: branch and bound with gaps; Job return, stronger bounds open |
 | T04.2 | 04 | QAOA simulation | — | **Done (D)** |
-| T04.3 | 04 | QPU hardware adapter | [optimization.py:168](src/mofpipe/optimization.py#L168) | open |
+| T04.3 | 04 | QPU hardware adapter | [qpu.py](src/mofpipe/qpu.py), [qpu_worker.py](src/mofpipe/qpu_worker.py) | **Done (F)** on Qiskit fake devices; real IBM devices open |
 | T05.1 | 05 | Geometry-level deduplication | [candidates.py:19](src/mofpipe/candidates.py#L19) | **Done (C)**; non-diagonal canonicalisation open |
 | T05.2 | 05 | Evaluation-batch acquisition policy | [candidates.py:46](src/mofpipe/candidates.py#L46) | **Done (C)** for training acquisition; finalist-pool budget open |
 | T06.1 | 06 | Periodic DFT backend | [dft.py:75](src/mofpipe/dft.py#L75), [dft.py:229](src/mofpipe/dft.py#L229), [dft.py:429](src/mofpipe/dft.py#L429) | **Done (B, C: PySCF GPW engine, CPU/GPU)**; DFT+U/hybrids in PySCF, k-point study, HPC open |
@@ -56,9 +56,9 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 | T08.2 | 08 | Stopping criteria | [refinement.py:90](src/mofpipe/refinement.py#L90) | **Done (C)**; solver-gap accounting, model-family expansion open |
 | T09.1 | 09 | Structural validation tool wrappers | [ranking.py:83](src/mofpipe/ranking.py#L83) | **Done (C)**: in-house checks + optional MOFChecker/Zeo++; CrystalNets, phonons, PXRD open |
 | T09.2 | 09 | Reference-phase competition | — | **Done (C)** for pure-endpoint references |
-| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:171](src/mofpipe/report.py#L171), [intake.py:369](src/mofpipe/intake.py#L369) | open |
-| T10.1 | 10 | AiiDA workflow engine and concurrency | [orchestrator.py:18](src/mofpipe/orchestrator.py#L18), [dft.py:429](src/mofpipe/dft.py#L429) | open |
-| T10.2 | 10 | Runtime agent layer | [gateway.py:52](src/mofpipe/gateway.py#L52), [intake.py:276](src/mofpipe/intake.py#L276) | open |
+| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:171](src/mofpipe/report.py#L171), [intake.py:369](src/mofpipe/intake.py#L369) | partial: live literature/dataset review (A67) and the deterministic-vs-agent ablation; paper reproductions open |
+| T10.1 | 10 | AiiDA workflow engine and concurrency | [aiida_engine.py](src/mofpipe/aiida_engine.py), [store.py](src/mofpipe/store.py) | **Done (F)**: WorkChain + provenance, optimistic commits; HPC CalcJobs and concurrency open |
+| T10.2 | 10 | Runtime agent layer | [agents/runner.py](src/mofpipe/agents/runner.py), [gateway.py](src/mofpipe/gateway.py) | **Done (F)** on the fixture; physical runs replay-tested only |
 
 ---
 
@@ -125,31 +125,38 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 ## Task 02 — Topology prescreen and ML potentials
 
 ### T02.1 Seed decoration generation
-- **Where:** `structures.screen_topologies`
-- **Now:** Identity screen: all supplied graphs are retained with evidence `NO_PHYSICAL_SCREENING_EVIDENCE`. Training labels come from fixture files.
-- **To do:** Implement `generate_seed_decorations(topology_id, sampling_policy_id)`. It should produce pure endpoints (where chemically meaningful), ordered mixed states, feasible random states and optional SQS-like states, with orientation diversity, all tagged with their sampling method.
-- **Done when:** Composition survives every sampling method, and the pure/SQS/ordered origin is distinguishable in the metadata.
+- **Where:** `screening.generate_seed_decorations`
+- **Now:** Per topology:
+  - pure-linker endpoints, used as matched references;
+  - the most symmetric ordered states, seeded random states and SQS-like states (unlike-pair count closest to random), all at the fixed composition.
+  - Every seed is tagged with its sampling method. The policy is `protocols.screening.sampling`.
+  - The fixture keeps the identity screen (no atoms).
+- **To do:** Orientation diversity, once linker orientation states exist (T01.4).
 
 ### T02.2 ML-potential relaxation
-- **Where:** same function
-- **Now:** `ml_potential: SKIPPED_NO_ATOMIC_GEOMETRY`
-- **To do:**
-  - Add `submit_relaxations(decoration_ids, calculator_protocol_id)` through a registered ASE-compatible calculator adapter, using the job interface.
-  - Verify the potential supports the elements, charges and magnetic assumptions, and flag out-of-domain use.
-  - Use one documented relaxation policy for all configurations.
-  - Check convergence, topology retention, cell distortion and mapping. Route connectivity-changing structures as transformed candidates, never as labels for the original lattice.
-- **Done when:** A failed relaxation is never ranked as high energy, and out-of-domain use is flagged.
-- **Needs:** The ML checkpoint and version.
+- **Where:** `mlip.MLPotentialBackend`, `mlip_worker.py`; protocol `protocols.ml_potential_checkpoint`
+- **Now:** **orb-v3-conservative-inf-omat + DFT-D3(BJ)**, chosen from MOFSimBench: orb-v3-omat and eSEN-OAM gave the most successful and accurate MOF optimizations, and orb's weights are open (Apache-2.0).
+  - Relaxations run in a worker subprocess with any interpreter that has orb-models, so the core never imports torch.
+  - One documented relaxation policy (FIRE/BFGS, variable or fixed cell, fmax, max steps).
+  - Jobs are idempotent on the protocol and geometry hashes. The engine identity, including the checkpoint sha256, is verified.
+  - Domain flags: net charge, open-shell initial states, declared elements.
+  - Checks: convergence, slot/node topology retention (TRANSFORMED candidates) and cell distortion. Failures are never energies.
+  - Verified on MOF-5 from CoRE MOF 2024: relaxed in 33 s on CPU, volume +1.2% vs experiment.
+- **To do:** GPU/MPS device and batching for large screens. Alternative engines (eSEN/UMA via fairchem, gated weights) behind the same protocol.
 
 ### T02.3 Calibration and screening decisions
-- **Where:** same function
-- **To do:**
-  - Calibrate ML energy *differences* against DFT (T06.1) on representative structures, and record the calibration domain. Label ML rankings exploratory until calibrated.
-  - Compare only matched inventories, using mixing energies.
-  - Emit retain / uncertain / deprioritise / reject with cited evidence. Hard rejection needs independent incompatibility evidence; energetic rejection needs a declared policy.
-  - Keep a reproducible audit sample of excluded structures, with reinstatement possible.
-- **Done when:** An uncertain topology survives for later exploration. A tiny known ordering fixture shows that screening does not discard its favourable mixed state.
-- **Needs:** A screening/rejection policy and a sampling policy. The template has no fields for either (see *Open specification decisions*).
+- **Where:** `screening.calibrate`, `screening.screen`; `protocols.ml_calibration`, `protocols.screening`; `Pipeline._physical_screening`
+- **Now:**
+  - ML-vs-DFT errors of energy differences are measured on representative seeds (lowest/highest ML energy per topology, cross-topology pairs included). The ranking is EXPLORATORY until within tolerance.
+  - Comparisons use the common formula unit at fixed composition; mixing energies are taken against each topology's own endpoints.
+  - Decisions:
+    - reject only on structural incompatibility;
+    - deprioritise only when calibrated, with a declared `energetic_policy`, and only when the gap exceeds threshold + 2 × calibration MAE;
+    - otherwise uncertain or retain;
+    - `reinstate` brings a topology back. The audit sample is the excluded topologies' seed results.
+  - Later stages see only kept topologies.
+  - Tested with consistent mock ML/DFT oracles: deprioritised when the gap is real. When calibration fails or relaxations fail, every topology survives.
+- **To do:** A real-DFT calibration of orb on the MOF-5 BDC/NH₂-BDC case (needs the Milestone B inputs).
 
 ## Task 03 — Configurational Hamiltonians and encodings
 
@@ -227,8 +234,14 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 - **Still open:** compiled Dicke-state preparation and a circuit-level (ancilla-qubit) simulation of quadratized QUBOs; noise models.
 
 ### T04.3 QPU hardware adapter
-- **Where:** `optimization.quantum_solver_status`
-- **To do:** Add a hardware adapter only after the simulator is accepted. Submission and budgets are controlled by the scheduler, never per optimizer iteration by an agent. Keep credentials in backend services only.
+- **Where:** `qpu.hardware_benchmark`, `qpu_worker.py`; `optimizer.quantum_protocol.kind = qpu_fake_device`
+- **Now:** Angles are optimised on the accepted statevector simulator, then the scheduler submits one sampling job per seed to a Qiskit fake IBM device (e.g. `fake_brisbane`), with no optimiser iterations on the device.
+  - The circuit is: exact Dicke-state preparation (Bärtschi–Eidenbenz), the physical-polynomial phase separator (1-, 2- and 3-body phases) and the XX+YY exchange mixer.
+  - Its noiseless probabilities match the simulator to 1e-6 or the stage fails.
+  - Samples are decoded, post-selected and re-evaluated, then reported against a uniform-random baseline.
+  - Shots count against `budgets.max_qpu_shots`. Jobs are idempotent.
+  - Fixture result on FakeBrisbane: about 850–1,050 ECR gates; about 22% of shots keep the composition.
+- **To do:** Real IBM devices through qiskit-ibm-runtime (account credentials in backend services only); error mitigation; shallower mixers.
 
 ## Task 05 — Deduplication and acquisition
 
@@ -410,40 +423,36 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
 
 ### T09.3 Benchmarks, ablations and literature review
 - **Where:** `report.build_report`; the literature check in `intake.validate_project`
-- **Now:** The report lists static literature entries with `live_review: NOT_RUN`. No benchmark or ablation sections.
+- **Now:**
+  - The deterministic report lists static literature entries with `live_review: NOT_RUN`.
+  - Agent runs add the A67 review: claims are mapped to cited passages and dataset records, with code-computed metrics.
+  - `mofpipe agents-eval` runs the deterministic-vs-agent ablation.
 - **To do:**
   - Benchmark sections that reproduce the Kang (arrangements), Cai (topology competition) and Fe–MOF-74 (electronic workflow) studies, with exact paper/data versions. Keep reproduction of a paper separate from agreement with experiment.
-  - Ablations that test actual claims: fixed topology vs joint search, heuristic vs fitted costs, no vs validated embedding, classical vs quantum optimizer, deterministic vs agent-assisted runs.
-  - Optionally, a live literature review that maps claims to cited passages.
+  - The remaining ablations: fixed topology vs joint search, heuristic vs fitted costs, no vs validated embedding, classical vs quantum optimizer.
 
 ## Task 10 — Agent architecture
 
 ### T10.1 AiiDA workflow engine and concurrency
-- **Where:** `orchestrator.py` (module level, before `STAGES`)
-- **Now:** A local sequential engine (`Pipeline`) with a JSON run store: authoritative `state.json`, an event log, content-addressed artifacts and stage reuse on re-run.
-- **To do:**
-  - Port the stages to AiiDA WorkChains, with CalcJobs for external DFT/QPU jobs, keeping the same interfaces.
-  - Add single-writer or optimistic-concurrency state commits.
-  - Run independent topologies, DFT configurations and solver seeds concurrently within resource limits.
-  - Support cancel/resume at calculation boundaries.
+- **Where:** `aiida_engine.py` (`mofpipe run --engine aiida`); `store.RunStore` (optimistic commits)
+- **Now:**
+  - `MofPipeWorkChain` steps through the stages with the same interfaces (`Pipeline.run(stop_after=...)`). Each committed stage is recorded as a provenance `Dict` (status, fingerprint, state version, artifact sha256), and it resumes at stage boundaries.
+  - Runs in-process on a project-local `verdi presto` profile (`.aiida`, SQLite, no RabbitMQ). Reproduces the local engine's report exactly.
+  - Every state write is locked and checks the on-disk revision; a second writer gets `STATE_VERSION_CONFLICT`.
+- **To do:** CalcJobs for DFT/ML/QPU on HPC (aiida-quantumespresso, a PySCF code plugin), and concurrent topologies/configurations/seeds with a daemon and broker. Cancel within a calculation.
 
 ### T10.2 Runtime agent layer
-- **Where:** `gateway.review_proposal`; the `runtime_agents_disabled` check in `intake.validate_project`
-- **Now:** Proposals are fully validated: schema, project ID, state version, role permissions, controller-only tools and evidence artifact existence. They are then always rejected (`AGENTS_DISABLED`, or `UNSUPPORTED` if agents were enabled). Projects with agents enabled are `BLOCKED`.
+- **Where:** `src/mofpipe/agents/` (packets, contracts, client, validate, literature, datasets, runner, evaluate); `gateway.review_proposal`; `intake.runtime_agent_errors`, `intake.select_topologies`
+- **Now:** Implemented per `MOF_AI_Agent_Implementation_Guide-2`:
+  - A1 selects topologies from a design brief with explicit, checked exclusions. A2 proposes the Hamiltonian form. A67 runs the final assessment against checks, papers (Valency MCP, local) and datasets (local CoRE MOF 2024 / QMOF copies with code-computed metrics).
+  - Strict contracts, the request budget (3, plus 1 optional), cache, ledger and decision records, LangGraph orchestration.
+  - `agents-eval` compares agent-assisted with deterministic runs (Milestone F).
+  - The A2 model-family expansion exists but is off by default.
 - **To do:**
-  - Execute accepted proposals:
-    - validate the arguments against policy
-    - reserve budget atomically
-    - submit idempotently
-    - record job and artifact IDs
-    - attempt a bounded repair on invalid output
-  - Expose the same tested functions as typed tools to the chosen LLM provider, with role prompts and per-role permissions from `runtime.allowed_tools_by_role`.
-  - Invoke roles only at the checkpoints listed in instructions/10.
-  - Store each decision with its evidence plus prompt/model/version metadata.
-  - Treat CIF metadata, papers and logs as untrusted data.
-- **Done when (Milestone F):**
-  - Compared against the deterministic baseline at equal budget: completion rate, invalid tool-call rate, duplicated jobs and cost.
-  - Replay tests cover stale state, malformed output, contaminated logs, missing active-space terms and budget exhaustion.
+  - Several construction options per framework once PORMAKE/ToBaCCo exist (T01.3). A1 now chooses among validated working cells only and cannot add nets.
+  - Split the pipeline before A2 once a real screening stage exists (T02.3).
+  - A live physical run, which needs the MOF-5 inputs.
+  - Full-text retrieval for Valency hits (abstract-only now).
 
 ---
 
@@ -488,4 +497,4 @@ They are verified on SYNTHETIC toys. Running MOF-5 BDC/NH₂-BDC needs: the veri
 1. **Before real runs:** T06.3 (GPU validation on a CUDA host), Gaussian-basis and k-point convergence studies, non-diagonal supercells if the MOF-5 primitive/conventional relation needs them.
 2. **Milestone D — done:** T03.4 (cubic quadratization), T03.5 (sublattice constraints, penalty bound, one-hot at the encoding layer), T04.1 (branch and bound), T04.2 (QAOA simulation benchmark), T07.1–T07.2 (active-space export and ED/CASCI/VQE/SQD, H₂/STO-3G published benchmark reproduced).
 3. **Milestone E — done:** T07.3 for the finite-cluster subtractive scheme (assembly, validation, corrected ranking), checked against an independent full-CCSD benchmark. Still open: the published Fe–MOF-74 reference and WF-in-DFT.
-4. **Milestone F:** T10.1, T10.2, T04.3, T09.3.
+4. **Milestone F — done in software:** T10.1 (AiiDA engine, optimistic commits), T10.2 (agents), T04.3 (fake-device QPU), T02.1–T02.3 (ML screening), T09.3 (A67 literature/dataset review, agent ablation). Open: HPC CalcJobs, real QPU devices, paper reproductions.

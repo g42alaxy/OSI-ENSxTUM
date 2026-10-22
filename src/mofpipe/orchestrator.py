@@ -8,10 +8,10 @@ from __future__ import annotations
 from fractions import Fraction
 
 from . import (acquisition, candidates, configuration_model, datasets, dft, embedding, encoding, framework, geometry_match,
-               optimization, ranking, references, refinement, structures, transfer, validation)
+               optimization, ranking, references, refinement, screening, structures, transfer, validation)
 from .contract import PipelineError, StageStatus, StopReason, content_hash, make_record
 from .electronic import SyntheticFixtureBackend, electronic_stage_status
-from .intake import FIXTURE_PROJECT_TYPE, validate_project
+from .intake import FIXTURE_PROJECT_TYPE, select_topologies, validate_project
 from .report import build_report, write_report
 from .store import RunStore
 
@@ -47,14 +47,27 @@ class Pipeline:
             self._backend = backend_cls(self.spec, self.store)
         return self._backend
 
-    def run(self) -> dict:
+    def _stage_inputs(self, name: str) -> dict:
+        """Inputs a stage reads besides its upstream: the A2 model grid enters only the fitting stages, so an agent
+        run reuses intake, construction and screening when A2 answers after screening (agents/runner.py)."""
+        grid = (self.spec.agent_plan or {}).get("model_grid")
+        return {"model_grid": grid} if grid is not None and name in ("refinement", "model_selection") else {}
+
+    def _apply_screening(self) -> None:
+        """Later stages see only the topologies screening kept; dropped ones stay in the screening artifacts."""
+        retained = (self.ctx.get("screening") or {}).get("retained")
+        if retained is not None and set(retained) != set(self.spec.topologies) and retained:
+            self.spec = select_topologies(self.spec, retained, keep_fingerprint=True)
+
+    def run(self, stop_after: str | None = None) -> dict:
+        """All stages, or up to ``stop_after`` (then the stage status and that stage's committed artifacts)."""
         upstream = self.spec.fingerprint
         halted = False
         for name in STAGES:
             if halted and name != "report":  # a halted run still reports what it did and why
                 self.status[name] = StageStatus.NOT_RUN.value
                 continue
-            fingerprint = content_hash({"stage": name, "upstream": upstream})
+            fingerprint = content_hash({"stage": name, "upstream": upstream, **self._stage_inputs(name)})
             previous = self.store.stage(name)
             if previous and previous["input_fingerprint"] == fingerprint and all(
                     self.store.has(a) for a in previous["artifact_ids"].values()):
@@ -64,6 +77,10 @@ class Pipeline:
                 self.store.log("stage_reused", stage=name)
                 halted = previous["detail"].get("halt", False) if isinstance(previous["detail"], dict) else False
                 upstream = content_hash({"prev": fingerprint, "ids": previous["artifact_ids"]})
+                if name == "screening":
+                    self._apply_screening()
+                if name == stop_after:
+                    break
                 continue
             try:
                 prefix = "_physical_" if self.physical and hasattr(self, f"_physical_{name}") else "_stage_"
@@ -78,6 +95,13 @@ class Pipeline:
             self.store.commit_stage(name, outcome.status.value, fingerprint, ids, detail)
             halted = outcome.halt
             upstream = content_hash({"prev": fingerprint, "ids": ids})
+            if name == "screening":
+                self._apply_screening()
+            if name == stop_after:
+                break
+        if stop_after:
+            return {"stopped_after": stop_after, "stage_status": dict(self.status), "detail": self.detail.get(stop_after),
+                    "screening": self.ctx.get("screening"), "topologies": list(self.spec.topologies)}
         return self.ctx.get("report") or {}
 
     # -- stages ------------------------------------------------------------
@@ -105,6 +129,17 @@ class Pipeline:
 
     def _stage_screening(self):
         return StageOutcome(StageStatus.COMPLETED, {"screening": structures.screen_topologies(self.spec)})
+
+    def _physical_screening(self):
+        """Task 02: ML-potential screen when protocols.ml_potential_checkpoint is declared; identity otherwise."""
+        if not self.spec.physical["protocols"].get("ml_potential_checkpoint"):
+            return self._stage_screening()
+        arts, detail = screening.screen(self.spec, self.store,
+                                        lambda topo, decos: self._evaluate_decorations(topo, decos, "ml_calibration"))
+        if not detail["retained"]:
+            return StageOutcome(StageStatus.FAILED, arts, {**detail, "error": {"code": "NO_TOPOLOGY_SURVIVED_SCREENING",
+                                                                              "detail": detail["decisions"]}}, halt=True)
+        return StageOutcome(StageStatus.COMPLETED, arts, detail)
 
     def _stage_labels(self):
         spec = self.spec
@@ -183,7 +218,13 @@ class Pipeline:
                 if bb["optimality_status"].startswith("OPTIMAL") and not agree:
                     return StageOutcome(StageStatus.FAILED, arts, {**detail, "error": {
                         "code": "SOLVER_DISAGREEMENT", "detail": tid}}, halt=True)
-            if opt.get("quantum_enabled"):
+            if opt.get("quantum_enabled") and opt["quantum_protocol"].get("kind") == "qpu_fake_device":
+                from . import qpu
+                bench = arts[f"quantum_hardware/{tid}"] = qpu.hardware_benchmark(self.spec, self.store, topo, ham, enc, exact,
+                                                                                opt["quantum_protocol"])
+                detail["quantum_benchmark"][tid] = {"status": bench["status"], "device": bench["device"]["device"],
+                                                    **bench["summary"]}
+            elif opt.get("quantum_enabled"):
                 bench = arts[f"quantum_benchmark/{tid}"] = qaoa.qaoa_benchmark(self.spec, topo, ham, enc, exact,
                                                                               opt["quantum_protocol"])
                 detail["quantum_benchmark"][tid] = {"status": bench["status"], **bench["summary"]}
@@ -707,5 +748,5 @@ class Pipeline:
         return StageOutcome(status, arts, {"checks": checks, "finalists": finalists})
 
 
-def run_pipeline(spec, run_dir) -> dict:
-    return Pipeline(spec, run_dir).run()
+def run_pipeline(spec, run_dir, stop_after: str | None = None) -> dict:
+    return Pipeline(spec, run_dir).run(stop_after)

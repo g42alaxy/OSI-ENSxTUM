@@ -42,7 +42,7 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 | intake, project validation | `intake.py`, `project_spec.py` | 01 |
 | CIF parsing, slot lattice, framework builder, working and transfer cells | `cif.py`, `framework.py`, `project_spec.py` | 01 |
 | decoration space, symmetry, swap reachability | `structures.py` | 01, 04 |
-| topology screen (identity mode) | `structures.py` | 02 |
+| topology screen: identity (fixture) or ML potential (orb-v3 + D3) with seeds, DFT calibration and conservative decisions | `structures.py`, `screening.py`, `mlip.py` | 02 |
 | label ingest, dataset snapshots, frozen split | `datasets.py` | integrator glue |
 | parent-lattice cluster orbits (point/pair, periodic, per formula unit) | `clusters.py` | 03 |
 | features, exact fit, model selection (fixture split; grouped CV + frozen holdout for physical projects) | `configuration_model.py` | 03 |
@@ -50,6 +50,7 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 | QUBO / HUBO compilation, cubic quadratization, sublattice constraints, penalty bound, one-hot; 2ⁿ identity check | `encoding.py` | 03 |
 | exact enumeration, branch and bound (certified or with gap), simulated annealing | `optimization.py` | 04 |
 | QAOA statevector simulation with exchange mixer; benchmark vs exact and annealing | `qaoa.py` | 04 |
+| QAOA sampling on Qiskit fake IBM devices (FakeBrisbane noise), circuit checked against the simulator | `qpu.py`, `qpu_worker.py` | 04 |
 | symmetry dedup, top-k pool; relaxed-geometry equivalence | `candidates.py`, `geometry_match.py` | 05 |
 | acquisition policy (energy / uncertainty / diversity / audit) | `acquisition.py` | 05 |
 | evaluator boundary (fixture mock backend as subprocess) | `electronic.py` | 06/07 boundary |
@@ -58,8 +59,73 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 | periodic DFT: engine adapters, jobs, cutoff convergence of energy differences | `dft.py`, `pyscf_worker.py` | 06 |
 | refinement: fixture active learning; physical rounds with declared stopping rules | `refinement.py`, `orchestrator.py` | 08 |
 | ranking, reference-phase competition, structural validation, report | `ranking.py`, `references.py`, `validation.py`, `report.py` | 09 |
-| proposal validation, agents disabled | `gateway.py` | 10 |
+| proposal validation (A1/A2/A67 envelopes) | `gateway.py` | 10 |
+| AiiDA WorkChain engine with stage provenance; optimistic state commits | `aiida_engine.py`, `store.py` | 10 |
+| runtime agents: packets, strict contracts, OpenRouter client, validation, literature (Valency MCP, local papers), LangGraph run | `agents/` | 10 |
+
+## Milestone F extras (ML screening, fake-device QPU, AiiDA)
+
+These run in the project `.venv`. The core stays importable without them: workers run as subprocesses, and the
+AiiDA module loads only with `--engine aiida`.
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e . --no-deps
+.venv/bin/pip install "pyscf>=2.10" "ase>=3.23" pytest
+.venv/bin/pip install -e '.[agents,mlip,qpu,aiida]' --no-deps   # then install the listed extras' packages
+AIIDA_PATH=$PWD/.aiida .venv/bin/verdi presto --profile-name mofpipe   # one-time, no services needed
+```
+
+`pyscf-dispersion>=1.5` (a core dependency) has no macOS arm64 wheel on PyPI. Without it, the DFT-D3/D4 path of the
+PySCF engine is unavailable on that platform.
+
+- **ML screening:** physical projects declare `protocols.ml_potential_checkpoint`, for example:
+  `{"engine": "orb", "model": "orb-v3-conservative-inf-omat", "dispersion": "D3BJ", "python": ".venv/bin/python", "relaxation": {"optimizer": "FIRE", "fmax_eV_per_A": 0.05, "max_steps": 400, "cell": "variable"}}`.
+  Optional `protocols.ml_calibration` and `protocols.screening` set the calibration and decision policy.
+- **QPU:** `optimizer.quantum_protocol` with `"kind": "qpu_fake_device", "device": "fake_brisbane", "python": ".venv/bin/python"`.
+- **AiiDA:** `python -m mofpipe run --engine aiida ...`.
+
+## Runtime agents (`src/mofpipe/agents`, optional)
+
+Three LLM roles from `MOF_AI_Agent_Implementation_Guide-2` (it supersedes the role list in `instructions/10`). Each role
+makes one strict-JSON request to OpenRouter (Qwen 3.8 by default). Code validates every output and does all the
+numerics.
+
+- **A1** reads a design brief (`--brief`, default: the project's purpose). It decides for every catalogue topology,
+  meaning every topology with validated inputs, whether to analyse it. An exclusion carries a reason code. Code
+  checks the factual reasons, and brief-scope exclusions are allowed only by policy. The project is then narrowed
+  to the selected topologies.
+- **A2** proposes, per selected topology, the Hamiltonian form: at most three catalogue models (feature families),
+  the encoding and the compilation path. A path that can't hold a model's degree is rejected. Code fits the
+  coefficients and selects the model with the frozen validation rule. Code also sets and verifies the
+  penalty-constrained QUBO/HUBO.
+- **A67** assesses the final candidates against the structural checks, literature passages and reference-dataset
+  records. Literature comes from Valency MCP and local papers. Dataset matches (local CoRE MOF 2024 / QMOF copies)
+  carry code-computed metrics (density, LCD, PLD). A67 can't pass a failed or missing check, and it can't cite
+  anything outside the evidence packet.
+
+```bash
+pip install -e '.[agents]'            # requests, jsonschema, pyyaml, langgraph, mcp, pypdf, pandas, pyarrow, h5py, huggingface_hub
+# put your OpenRouter key and Valency token in controls.yaml (gitignored)
+PYTHONPATH=src python3 -m mofpipe agents-check
+PYTHONPATH=src python3 -m mofpipe datasets-fetch                 # pinned CoRE MOF 2024 / QMOF copies into data/reference/
+PYTHONPATH=src python3 -m mofpipe agents --project mof_no_agent_fixture/project.json --case higher_order \
+    --correction topology_dependent --brief "..."
+PYTHONPATH=src python3 -m mofpipe agents-eval --project mof_no_agent_fixture/project.json   # Milestone F comparison
+```
+
+The graph is fixed: A1 → construction and screening (ML potential when declared) → A2 → the rest of the pipeline (screened stages reused) → evidence → A67. It runs on LangGraph, or on a sequential runner with the
+same routes. A normal run makes three requests. One optional extra request repairs an invalid output. Re-asking A2
+after `MODEL_INADEQUATE` is off by default (`budget.allow_model_expansion`).
+
+A run directory holds:
+- `agent/`: packets, gateway `DecisionRecord`s, `AgentDecision`s, `ledger.json`, `evidence.json` and `datasets.json`;
+- `pipeline_N/`: ordinary pipeline runs, with `agent_layer` in the report;
+- `assessment.md`;
+- `agent_run.json`.
+
+The deterministic commands never import this package. A project with agents enabled is `BLOCKED` unless it is run
+through `mofpipe agents`. Tests (`tests/test_agents.py`) replay scripted outputs and use no network.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for what each stage does and what every test checks, and [TODO.md](TODO.md) for every unimplemented part (`#TODO` markers in code) and what it requires.
 
-Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, ML potentials and screening, DFT+U and hybrid functionals in the PySCF engine, WF-in-DFT embedding and the published Fe–MOF-74 embedding reference, hardware SQD and QPU adapters, multicomponent decorations beyond the encoding layer, quartic quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, live literature review, runtime agents. MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.
+Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, DFT+U and hybrid functionals in the PySCF engine, WF-in-DFT embedding and the published Fe–MOF-74 embedding reference, hardware SQD and real-QPU execution (fake IBM devices only), HPC CalcJobs and concurrent execution under AiiDA, multicomponent decorations beyond the encoding layer, quartic quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, paper reproductions (Kang, Cai, Fe–MOF-74). MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.

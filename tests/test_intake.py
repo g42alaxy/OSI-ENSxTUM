@@ -85,7 +85,7 @@ def test_learner_cannot_read_harness_or_outside_files(rel):
 
 def test_runtime_agents_enabled_blocks_run(tmp_path):
     spec = load_project(PROJECT, overrides={"runtime_agents": {"enabled": True}})
-    assert "AGENT_LAYER_NOT_IMPLEMENTED" in codes(validate_project(spec))
+    assert {"AGENT_POLICY_INVALID", "AGENT_RUNNER_REQUIRED"} <= set(codes(validate_project(spec)))
     report = run_pipeline(spec, tmp_path / "run")
     assert report["stage_status"]["intake"] == "BLOCKED"
     assert report["stage_status"]["model_selection"] == "NOT_RUN"

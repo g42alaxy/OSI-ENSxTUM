@@ -24,6 +24,7 @@
     "builder": null,
     "ml_potential_checkpoint": null,
     "ml_calibration": null,
+    "screening": null,
     "dft": null,
     "embedding": null,
     "active_space": null,

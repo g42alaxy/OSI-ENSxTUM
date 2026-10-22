@@ -35,8 +35,12 @@ def protocol_errors(protocol: dict | None) -> list:
     if not protocol:
         return [("SCIENTIFIC_SPEC_MISSING", "protocol")]
     errors = []
-    if protocol.get("kind", "qaoa_simulation") != "qaoa_simulation":
-        errors.append(("UNSUPPORTED_QUANTUM_BACKEND", f"kind={protocol.get('kind')} (QPU hardware is T04.3)"))
+    kind = protocol.get("kind", "qaoa_simulation")
+    if kind == "qpu_fake_device":  # T04.3: simulator-optimised angles sampled on a Qiskit fake device (qpu.py)
+        from .qpu import protocol_errors as qpu_errors
+        errors += qpu_errors(protocol)
+    elif kind != "qaoa_simulation":
+        errors.append(("UNSUPPORTED_QUANTUM_BACKEND", f"kind={kind}"))
     for k in PROTOCOL_REQUIRED:
         value = protocol.get(k)
         if k == "seeds":

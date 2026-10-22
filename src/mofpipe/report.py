@@ -29,6 +29,8 @@ def not_executed(spec) -> list:
     physical = spec.physical or {}
     if (physical.get("protocols") or {}).get("embedding"):
         executed.add("embedding correction")  # its validation status is in the embedding section
+    if (physical.get("protocols") or {}).get("ml_potential_checkpoint"):
+        executed.add("ML-potential relaxation and calibration")  # screening section: calibrated or exploratory
     out = [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS + PHYSICAL_EXECUTED + tuple(executed)]
     out += NOT_EXECUTED_PHYSICAL
     if not any((physical.get("transfer_topologies") or {}).values()):
@@ -83,7 +85,21 @@ def _physical_section(spec, store, ctx, detail) -> dict:
             "dft_cache_hits": store.state["counters"].get("dft_cache_hits", 0),
             "rerun": "python -m mofpipe run --project <project.json> --run-dir <dir>; identical inputs reuse every job"},
         "embedding": _embedding_section(ctx, detail),
+        "screening": _screening_section(ctx),
     }
+
+
+def _screening_section(ctx) -> dict | None:
+    report = ctx.get("screening")
+    if not report or report.get("mode") != "ml_potential":
+        return None
+    return {"ranking_label": report["ranking_label"], "fidelity": report["fidelity"], "domain_flags": report["domain_flags"],
+            "engine": {k: report["engine_identity"].get(k) for k in ("model", "dispersion", "orb_models_version", "checkpoint_sha256")},
+            "calibration_id": report["calibration_id"], "retained": report["retained"],
+            "decisions": [{"topology_id": d["topology_id"], "state": d["state"], "reason": d["reason"],
+                           "min_energy_per_formula_unit_eV": d["evidence"]["min_energy_per_formula_unit_eV"],
+                           "gap_to_best_eV_per_formula_unit": d["evidence"]["gap_to_best_eV_per_formula_unit"],
+                           "seed_statuses": d["evidence"]["seed_statuses"]} for d in report["decisions"]]}
 
 
 def _embedding_section(ctx, detail) -> dict | None:
@@ -141,6 +157,15 @@ def _topology_section(spec, ctx, tid) -> dict:
     return out
 
 
+def _agent_section(spec) -> dict:
+    """Validated A1/A2 decisions this run used; A67 reviews the finished report (agents/runner.py)."""
+    plan = spec.agent_plan
+    return {"roles": ["A1", "A2", "A67"], "decision_ids": plan["decision_ids"], "design_brief": plan.get("design_brief"),
+            "construction_plans": plan["construction_plans"], "excluded_topologies": plan.get("excluded_topologies"),
+            "model_grid": plan["model_grid"], "llm_requests_before_pipeline": plan["llm_requests_before_pipeline"],
+            "note": "Agents chose catalogue options only; fitting, selection, solving and ranking are deterministic."}
+
+
 def build_report(spec, store, ctx, detail, status) -> dict:
     corrected, base = ctx.get("ranking/corrected"), ctx.get("ranking/base")
     executed = {k: v for k, v in status.items() if v == StageStatus.COMPLETED.value}
@@ -155,9 +180,11 @@ def build_report(spec, store, ctx, detail, status) -> dict:
         "ReportArtifacts", spec.provenance, **extra, project_id=spec.project_id, case=spec.case,
         correction_mode=spec.correction_mode,
         pipeline_status=final, project_fingerprint=spec.fingerprint, stage_order=list(status) + ["report"],
-        runtime_agents_enabled=False, llm_calls=store.state["counters"].get("llm_calls", 0), network_calls=0,
+        runtime_agents_enabled=spec.agent_plan is not None,
+        llm_calls=store.state["counters"].get("llm_calls", 0) + (spec.agent_plan or {}).get("llm_requests_before_pipeline", 0),
+        network_calls=0, **({"agent_layer": _agent_section(spec)} if spec.agent_plan else {}),
         stage_status=dict(status), completed_software_stages=sorted(executed),
-        stage_detail={k: v for k, v in detail.items() if k in ("structures", "labels", "refinement", "model_selection",
+        stage_detail={k: v for k, v in detail.items() if k in ("structures", "screening", "labels", "refinement", "model_selection",
                                                                "supercell_checks", "encoding", "optimization", "candidates",
                                                                "evaluation", "embedding", "ranking", "validation")},
         topologies={tid: _topology_section(spec, ctx, tid) for tid in spec.topologies},
@@ -192,7 +219,9 @@ def write_report(run_dir: Path, report: dict) -> None:
               + ("Abstract substitution graphs; not atomistic MOF predictions. " if "physical" not in report else
                  "CIF-derived slot lattice with periodic DFT labels" + ("; labelled SYNTHETIC, not physical evidence. "
                                                                         if report["provenance"] == "SYNTHETIC" else ". "))
-              + f"Runtime agents: disabled. LLM calls: {report['llm_calls']}."), "",
+              + ("Runtime agents: A1/A2 proposals (validated) set the construction plans and model grid. "
+                 if report.get("agent_layer") else "Runtime agents: disabled. ")
+              + f"LLM calls: {report['llm_calls']}."), "",
              (f"Pipeline status: **{report['pipeline_status']}** — winning topology (corrected pool): "
               f"**{report['winning_topology']}** (base: {report['base_winning_topology']})" if "physical" not in report else
               f"Pipeline status: **{report['pipeline_status']}** — lowest DFT energy (base level, ties within tolerance "
@@ -217,6 +246,12 @@ def write_report(run_dir: Path, report: dict) -> None:
                   f"- split counts: {ph['split_counts']}", f"- final holdout: {ph['holdout']}",
                   f"- transformation events: {len(ph['transformation_events'] or [])}, failed labels: "
                   f"{len(ph['failed_labels'] or [])}", ""]
+        if ph.get("screening"):
+            sc = ph["screening"]
+            lines += ["## ML-potential topology screening (Task 02)", "",
+                      f"Ranking: **{sc['ranking_label']}** ({sc['fidelity']}); domain flags: {sc['domain_flags'] or 'none'}.", "",
+                      _md_table(sc["decisions"], ["topology_id", "state", "min_energy_per_formula_unit_eV",
+                                                  "gap_to_best_eV_per_formula_unit", "reason"]), ""]
         if ph.get("refinement"):
             ref = ph["refinement"]
             lines += ["## Refinement (active learning)", "", f"Stop reason: **{ref['stop_reason']}** — {ref['criterion']}", "",

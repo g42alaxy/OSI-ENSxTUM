@@ -1,11 +1,15 @@
 """Persistent workflow state, immutable artifact store and event log.
 
-Workflow state on disk is authoritative (00_SHARED_CONTRACT, execution contract).
+Workflow state on disk is authoritative (00_SHARED_CONTRACT, execution contract). Commits are optimistic: every
+state write takes a file lock and checks that the on-disk revision is the one this store last read or wrote, so a
+second writer (another process, an AiiDA worker) raises STATE_VERSION_CONFLICT instead of overwriting (T10.1).
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 from .contract import PipelineError, canonical_json
@@ -24,6 +28,7 @@ class RunStore:
         else:
             self.state = {"state_version": 0, "project_fingerprint": None, "stages": {},
                           "counters": {"evaluator_submissions": 0, "evaluator_cache_hits": 0, "llm_calls": 0}}
+        self._revision = self.state.get("revision", 0)  # the on-disk revision this store last read or wrote
 
     # -- artifacts ---------------------------------------------------------
     def _path(self, artifact_id: str) -> Path:
@@ -88,8 +93,22 @@ class RunStore:
         with open(self.root / "events.jsonl", "a") as handle:
             handle.write(line + "\n")
 
+    @contextmanager
+    def _lock(self):
+        with open(self.root / "state.lock", "a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
     def _save_state(self) -> None:
-        self._atomic_write(self.state_path, json.dumps(self.state, indent=2, sort_keys=True))
+        with self._lock():
+            on_disk = json.loads(self.state_path.read_text()).get("revision", 0) if self.state_path.exists() else 0
+            if on_disk != self._revision:
+                raise PipelineError("STATE_VERSION_CONFLICT", f"{self.root}: revision {on_disk} on disk, {self._revision} expected")
+            self.state["revision"] = self._revision = on_disk + 1
+            self._atomic_write(self.state_path, json.dumps(self.state, indent=2, sort_keys=True))
 
     @staticmethod
     def _atomic_write(path: Path, text: str) -> None:

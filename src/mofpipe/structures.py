@@ -155,12 +155,11 @@ def build_framework(spec, topology, decoration: dict) -> dict:
 
 
 def screen_topologies(spec) -> dict:
-    """Task 02 in identity mode: no physical screening evidence, so every graph is retained."""
-    #TODO: Task 02 — generate_seed_decorations (pure endpoints, ordered, random, SQS-like, orientation diversity).
-    #TODO: Task 02 — ML-potential relaxation via a registered ASE calculator adapter (submit_relaxations), check
-    #TODO: element/charge/magnetic compatibility, relaxation convergence and topology retention.
-    #TODO: Task 02 — calibrate ML energy differences against DFT, record the calibration domain, and emit
-    #TODO: retain/uncertain/deprioritise/reject with evidence plus a reproducible audit sample of exclusions.
+    """Task 02 in identity mode: no physical screening evidence, so every graph is retained.
+
+    Physical projects that declare ``protocols.ml_potential_checkpoint`` use the ML-potential screen (screening.py).
+    """
+    #TODO: Task 01 — orientation diversity in the screening seeds needs linker orientation states (T01.4).
     screen = spec.config["topology_screen"]
     decisions = [{"topology_id": tid, "state": "retain", "evidence": "NO_PHYSICAL_SCREENING_EVIDENCE"}
                  for tid in spec.topologies if tid in screen["retain"]]
@@ -168,4 +167,4 @@ def screen_topologies(spec) -> dict:
     return make_record("ScreeningReport", spec.provenance, mode=screen["mode"], decisions=decisions,
                        geometric_screen=screen.get("geometric_screen", skipped),
                        ml_potential=skipped if spec.physical is None else StageStatus.DISABLED_BY_CONFIG.value,
-                       exclusion_ledger=[])
+                       exclusion_ledger=[], retained=[d["topology_id"] for d in decisions])

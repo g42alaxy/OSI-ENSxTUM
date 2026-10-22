@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .contract import PipelineError, StageStatus, content_hash, make_record
@@ -90,6 +90,8 @@ class ProjectSpec:
     fingerprint: str = field(default="")
     project_type: str = FIXTURE_PROJECT_TYPE
     physical: dict | None = None  # parsed structures, protocols and load errors of a physical project
+    # Validated A1/A2 decisions (agents/runner.py): setup plans and the per-topology model grid. None = no agents.
+    agent_plan: dict | None = None
 
     @property
     def n_B(self) -> int:
@@ -254,6 +256,62 @@ def topology_checks(spec: ProjectSpec, topo: TopologySpec) -> tuple[list, list]:
     return checks, errors
 
 
+def select_topologies(spec: ProjectSpec, selected, keep_fingerprint: bool = False) -> ProjectSpec:
+    """The project restricted to a subset of its candidate topologies; unchanged if all are kept.
+
+    Used for A1's selection (agents/runner.py, new fingerprint) and inside a run after ML screening
+    (orchestrator, ``keep_fingerprint``: the run's inputs did not change, the screening artifacts record why).
+    Topology-keyed rows, split manifests, physical sources, lattices, transfer cells and builder data are filtered.
+    """
+    keep = [t for t in spec.topologies if t in set(selected)]
+    if keep == list(spec.topologies):
+        return spec
+    if not keep:
+        raise PipelineError("NO_TOPOLOGY_SELECTED")
+    rows = lambda rs: [r for r in rs if r.get("topology_id") in keep]
+    config = copy.deepcopy(spec.config)
+    config["topology_screen"]["retain"] = keep
+    fields = dict(config=config, topologies={t: spec.topologies[t] for t in keep}, training_rows=rows(spec.training_rows),
+                  development_rows=rows(spec.development_rows), candidate_rows=rows(spec.candidate_rows),
+                  split_manifest={t: v for t, v in spec.split_manifest.items() if t in keep})
+    if spec.physical is not None:
+        physical = dict(spec.physical)
+        transfers = {t: v for t, v in (physical.get("transfer_topologies") or {}).items() if t in keep}
+        cells = set(keep) | {c.topology_id for v in transfers.values() for c in v}
+        physical.update(sources=[s for s in physical["sources"] if s.get("topology_id") in keep], transfer_topologies=transfers,
+                        lattices={t: v for t, v in physical["lattices"].items() if t in cells},
+                        builder_info={t: v for t, v in physical["builder_info"].items() if t in cells})
+        raw = config["project_spec"]
+        raw["candidate_topology_ids"] = [t for t in raw.get("candidate_topology_ids") or [] if t in keep]
+        raw["source_structures"] = [x for x in raw.get("source_structures") or [] if x.get("topology_id") in keep]
+        fields["physical"] = physical
+    narrowed = replace(spec, **fields)
+    if not keep_fingerprint:
+        object.__setattr__(narrowed, "fingerprint", content_hash({"base": spec.fingerprint, "selected_topologies": keep}))
+    return narrowed
+
+
+AGENT_ROLES = ("A1", "A2", "A67")
+AGENT_REQUEST_CEILINGS = (3, 4)  # three normal requests, plus the single optional repair/expansion request
+
+
+def runtime_agent_errors(spec: ProjectSpec) -> list:
+    """Agent policy (MOF_AI_Agent_Implementation_Guide-2 / Task 10): off, or exactly A1/A2/A67 via ``mofpipe agents``."""
+    agents = spec.config.get("runtime_agents", {})
+    if agents.get("enabled") is False and agents.get("llm_calls_allowed") is False:
+        return [] if spec.agent_plan is None else [("AGENT_PLAN_WITH_AGENTS_DISABLED", "agent_plan is set")]
+    errors = []
+    if agents.get("enabled") is not True or agents.get("llm_calls_allowed") is not True:
+        errors.append(("AGENT_POLICY_INVALID", "enabled and llm_calls_allowed must both be true or both false"))
+    if tuple(agents.get("roles") or ()) != AGENT_ROLES:
+        errors.append(("AGENT_POLICY_INVALID", f"roles must be {list(AGENT_ROLES)}"))
+    if agents.get("max_llm_requests") not in AGENT_REQUEST_CEILINGS:
+        errors.append(("AGENT_POLICY_INVALID", f"max_llm_requests must be one of {AGENT_REQUEST_CEILINGS}"))
+    if spec.agent_plan is None:
+        errors.append(("AGENT_RUNNER_REQUIRED", "runtime agents run only through `python -m mofpipe agents`"))
+    return errors
+
+
 def validate_project(spec: ProjectSpec) -> dict:
     """validate_project(project_spec) -> ValidationReport (Task 01)."""
     from .configuration_model import feature_degree, is_known_feature
@@ -273,10 +331,9 @@ def validate_project(spec: ProjectSpec) -> dict:
     check("schema", cfg.get("schema") == FIXTURE_SCHEMA, "UNSUPPORTED_PROJECT_SCHEMA", str(cfg.get("schema")))
     check("project_provenance", spec.provenance == "SYNTHETIC", "PROVENANCE_MISMATCH", spec.provenance)
     check("building_block_provenance", spec.building_blocks.get("provenance") == "SYNTHETIC", "PROVENANCE_MISMATCH")
-    #TODO: Task 10 — runtime agent layer (structure / model_search / electronic / reviewer roles via the tool gateway).
-    agents = cfg.get("runtime_agents", {})
-    check("runtime_agents_disabled", agents.get("enabled") is False and agents.get("llm_calls_allowed") is False,
-          "AGENT_LAYER_NOT_IMPLEMENTED", "runtime agents must be disabled in this build")
+    agent_errors = runtime_agent_errors(spec)
+    for code, detail in agent_errors or [(None, "")]:
+        check("runtime_agents" + (f":{code}" if code else ""), code is None, code, detail)
     check("finite_temperature_out_of_scope", cfg.get("finite_temperature", {}).get("enabled") is False,
           "UNSUPPORTED_SCOPE_FINITE_TEMPERATURE")
 

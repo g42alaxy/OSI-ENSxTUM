@@ -80,10 +80,11 @@ def pipeline(tmp_path):
 
 def _proposal(p, **changes):
     fit = p.ctx["selection/ring12"]["artifact_id"]
-    base = {"project_id": p.spec.project_id, "expected_state_version": p.store.version, "role": "model_search",
+    base = {"project_id": p.spec.project_id, "expected_state_version": p.store.version, "role": "A2",
             "evidence_artifact_ids": [fit],
-            "proposed_action": {"tool": "plan_next_batch", "arguments": {"snapshot_id": p.ctx["train"]["artifact_id"]}},
-            "rationale": "Development validation and topology coverage require additional labels."}
+            "proposed_action": {"tool": "propose_model_candidates",
+                                "arguments": {"topologies": [{"topology_id": "ring12",
+                                                              "candidate_model_ids": ["M1_two_shell_pairs"]}]}}}
     base.update(changes)
     return base
 
@@ -91,7 +92,7 @@ def _proposal(p, **changes):
 @pytest.mark.parametrize("changes,code", [
     ({}, "AGENTS_DISABLED"),
     ({"expected_state_version": 0}, "STALE_STATE_VERSION"),
-    ({"role": "planner"}, "UNKNOWN_ROLE"),
+    ({"role": "model_search"}, "UNKNOWN_ROLE"),
     ({"proposed_action": {"tool": "submit_periodic_dft"}}, "TOOL_NOT_PERMITTED_FOR_ROLE"),
     ({"proposed_action": {"tool": "advance_workflow"}}, "TOOL_NOT_PERMITTED_FOR_ROLE"),
     ({"evidence_artifact_ids": ["FIT_REPORT_ID"]}, "UNKNOWN_EVIDENCE_ARTIFACT"),
@@ -102,6 +103,14 @@ def test_replayed_proposals_are_validated_and_never_executed(pipeline, changes, 
     assert decision["outcome"] == "REJECTED" and decision["error"]["code"] == code and decision["executed"] is False
 
 
+def test_valid_proposal_is_accepted_but_not_executed_when_agents_enabled(pipeline):
+    decision = review_proposal(pipeline.store, pipeline.spec.project_id, _proposal(pipeline), agents_enabled=True)
+    assert decision["outcome"] == "ACCEPTED" and decision["error"] is None and decision["executed"] is False
+    wrong_role = review_proposal(pipeline.store, pipeline.spec.project_id,
+                                 _proposal(pipeline, proposed_action={"tool": "write_final_assessment"}), agents_enabled=True)
+    assert wrong_role["error"]["code"] == "TOOL_NOT_PERMITTED_FOR_ROLE"
+
+
 def test_malformed_proposal(pipeline):
-    decision = review_proposal(pipeline.store, pipeline.spec.project_id, {"role": "model_search"}, agents_enabled=False)
+    decision = review_proposal(pipeline.store, pipeline.spec.project_id, {"role": "A2"}, agents_enabled=False)
     assert decision["error"]["code"] == "MALFORMED_PROPOSAL"

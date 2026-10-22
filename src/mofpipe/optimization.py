@@ -165,10 +165,12 @@ def branch_and_bound(spec, topo, hamiltonian: dict, node_limit: int = 1_000_000,
 
 
 def quantum_solver_status(spec) -> dict:
-    #TODO: Task 04 — QPU hardware adapter, only after simulator acceptance (scheduler controls budgets).
+    #TODO: Task 04 — real IBM devices (qiskit-ibm-runtime SamplerV2 with an account); fake devices only now (qpu.py).
     enabled = spec.config["optimizer"].get("quantum_enabled", False)
+    fake = enabled and (spec.config["optimizer"].get("quantum_protocol") or {}).get("kind") == "qpu_fake_device"
     return {"qaoa_simulation": StageStatus.COMPLETED.value if enabled else StageStatus.DISABLED_BY_CONFIG.value,
             "qpu_hardware": StageStatus.DISABLED_BY_CONFIG.value,
+            "qpu_fake_device": StageStatus.COMPLETED.value if fake else StageStatus.DISABLED_BY_CONFIG.value,
             "note": ("QAOA statevector simulation benchmark on the frozen Hamiltonian; not evidence of quantum speedup."
                      if enabled else "No circuits executed; fixed-count swap reachability is a graph check only.")}
 
