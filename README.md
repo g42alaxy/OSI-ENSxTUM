@@ -19,7 +19,7 @@ MTV-MOFs carry two or more linkers on one framework, and their properties depend
 
 Every run is reproducible: immutable artifacts, an event log, and a deterministic mode with the agents switched off. The whole pipeline was built during the hackathon.
 
-![Pipeline overview](docs/pipeline.png)
+![Pipeline overview](docs/new_pipeline.png)
 
 ### How the AI agents are used
 
