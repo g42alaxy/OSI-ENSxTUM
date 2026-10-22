@@ -24,6 +24,9 @@ from itertools import combinations
 from .contract import PipelineError, StageStatus, make_record
 
 ORDERING = "qubit 2p = alpha spin orbital p, qubit 2p+1 = beta spin orbital p; occupation bit q is qubit q"
+EXACT_SOLVERS = ("exact_diagonalization", "pyscf_casci")
+VARIATIONAL_SOLVERS = ("vqe_simulation", "sqd_simulation")
+CONSISTENCY_TOL_HA = 1e-8  # numerical agreement between exact solvers; variational results may not go below
 
 
 def _np():
@@ -194,8 +197,9 @@ def _recover(sample: int, norb: int, nelec, occupancy: list) -> int | None:
     return sample
 
 
-def sqd_simulation(artifact: dict, state: dict, shots: int, seed: int, flip_probability: float = 0.0) -> dict:
-    """SQD from SIMULATED samples of ``state`` ({occupation int as str: amplitude})."""
+def sqd_simulation(artifact: dict, state: dict, shots: int, seed: int, flip_probability: float = 0.0,
+                   source_result_id: str | None = None) -> dict:
+    """SQD from SIMULATED samples of ``state`` ({occupation int as str: amplitude}) produced by ``source_result_id``."""
     np = _np()
     h1, h2, ecore, nelec, norb = _problem(artifact)
     rng = random.Random(seed)
@@ -225,7 +229,8 @@ def sqd_simulation(artifact: dict, state: dict, shots: int, seed: int, flip_prob
     subspace = [a | b for a in alphas for b in betas]
     values = np.linalg.eigvalsh(hamiltonian_matrix(h1, h2, ecore, subspace, norb))
     return _result(artifact, "sqd_simulation", values[0], StageStatus.COMPLETED.value, exactness="VARIATIONAL_UPPER_BOUND",
-                   sample_source="SIMULATED (statevector sampling, declared bit-flip noise)", shots=shots, seed=seed,
+                   sample_source="SIMULATED (statevector sampling, declared bit-flip noise)",
+                   source_result_id=source_result_id, shots=shots, seed=seed,
                    flip_probability=flip_probability, in_sector_fraction=len(valid) / shots,
                    recovered_samples=shots - len(valid), n_alpha_strings=len(alphas), n_beta_strings=len(betas),
                    subspace_dimension=len(subspace), full_sector_dimension=len(sector_determinants(norb, nelec)),
@@ -239,6 +244,20 @@ def sqd_hardware(artifact: dict, backend: str | None = None) -> dict:
     return _result(artifact, "sqd_hardware", None, StageStatus.BLOCKED.value,
                    failure={"code": "BACKEND_UNAVAILABLE",
                             "detail": f"no QPU backend configured ({backend}); credentials live in backend services only"})
+
+
+def solver_consistency(results: list) -> dict:
+    """Exact solvers must agree with each other; variational ones may not go below the exact energy."""
+    exact = [r["energy_Ha"] for r in results if r["solver"] in EXACT_SOLVERS and r["energy_Ha"] is not None]
+    problems = []
+    if exact and max(exact) - min(exact) > CONSISTENCY_TOL_HA:
+        problems.append(f"exact solvers disagree by {max(exact) - min(exact):.3e} Ha")
+    for r in results:
+        if exact and r["solver"] in VARIATIONAL_SOLVERS and r["energy_Ha"] is not None \
+                and r["energy_Ha"] < min(exact) - CONSISTENCY_TOL_HA:
+            problems.append(f"{r['solver']} ({r.get('seed')}) is below the exact energy")
+    return {"consistent": not problems, "problems": problems, "tolerance_Ha": CONSISTENCY_TOL_HA,
+            "hamiltonian_hashes": sorted({r["hamiltonian_hash"] for r in results})}
 
 
 def run_electronic_benchmark(spec: dict, store=None) -> dict:
@@ -257,10 +276,13 @@ def run_electronic_benchmark(spec: dict, store=None) -> dict:
         elif name == "vqe_simulation":
             results[name] = vqe_simulation(artifact, **spec.get("vqe", {}))
         elif name == "sqd_simulation":
-            source = results.get("vqe_simulation") or vqe_simulation(artifact)
+            if "vqe_simulation" not in results:  # the sampled state is a stored result, never an untracked one
+                results["vqe_simulation"] = vqe_simulation(artifact, **spec.get("vqe", {}))
+            source = results["vqe_simulation"]
             cfg = spec.get("sqd", {})
             results[name] = [sqd_simulation(artifact, source["final_state"], cfg.get("shots", 1000), s,
-                                            cfg.get("flip_probability", 0.0)) for s in cfg.get("seeds", [0])]
+                                            cfg.get("flip_probability", 0.0), source["artifact_id"])
+                             for s in cfg.get("seeds", [0])]
         elif name == "sqd_hardware":
             results[name] = sqd_hardware(artifact, spec.get("sqd", {}).get("backend"))
         else:
@@ -276,14 +298,15 @@ def run_electronic_benchmark(spec: dict, store=None) -> dict:
                     comparisons.setdefault(f"{name}_minus_exact_Ha", []).append(r["energy_Ha"] - exact["energy_Ha"])
     if "E_HF_Ha" in ref:
         comparisons["hf_vs_published_Ha"] = artifact["mean_field"]["energy_Ha"] - ref["E_HF_Ha"]
-    reproduced = exact is not None and abs(comparisons["exact_vs_published_Ha"]) <= ref["tolerance_Ha"] and \
-        abs(comparisons.get("hf_vs_published_Ha", 0.0)) <= ref["tolerance_Ha"]
     flat = [r for res in results.values() for r in (res if isinstance(res, list) else [res])]
+    consistency = solver_consistency(flat)
+    reproduced = exact is not None and abs(comparisons["exact_vs_published_Ha"]) <= ref["tolerance_Ha"] and \
+        abs(comparisons.get("hf_vs_published_Ha", 0.0)) <= ref["tolerance_Ha"] and consistency["consistent"]
     report = make_record(
         "ElectronicBenchmarkReport", artifact["provenance"], benchmark_id=spec["benchmark_id"],
         active_space_id=artifact["artifact_id"], hamiltonian_hash=artifact["hamiltonian_hash"],
         identical_problem=all(r["hamiltonian_hash"] == artifact["hamiltonian_hash"] for r in flat),
-        published_reference=ref, comparisons=comparisons,
+        published_reference=ref, comparisons=comparisons, solver_consistency=consistency,
         status="REPRODUCED" if reproduced else "NOT_REPRODUCED",
         solver_status={r["solver"] + (f":{r.get('seed')}" if r.get("seed") is not None else ""): r["status"] for r in flat},
         result_ids=[r["artifact_id"] for r in flat], correction_status="UNVALIDATED",

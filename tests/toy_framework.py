@@ -200,3 +200,24 @@ def write_toy_milestone_c_project(dst, overrides=None, mutate=None) -> Path:
         if mutate:
             mutate(spec)
     return write_toy_project(dst, _merge(milestone_c_overrides(sha(staggered)), overrides or {}), mutate=add_second)
+
+
+# -- Milestone E: finite-cluster subtractive embedding with a mock cluster engine ---------------------------------
+def embedding_protocol(dst, bond_hops=1, series=(1, 2), benchmarks=(), low_xc="PBE"):
+    """SYNTHETIC embedding protocol: Zn-node clusters capped with H, evaluated by tests/mock_cluster.py."""
+    return {"protocol_id": "toy_subtractive_mock", "scheme": "finite_cluster_subtractive", "engine": "external",
+            "command": [sys.executable, str((Path(dst) / "tools/mock_cluster.py").resolve())],
+            "region": {"bond_hops": bond_hops}, "capping": {"element": "H", "distance_A": {"Zn": 1.60, "O": 0.97, "C": 1.09}},
+            "cluster_charge": -4, "cluster_spin": 0, "basis": "def2-svp",
+            "low_level": {"method": "DFT", "xc": low_xc, "dispersion": "grimme-d3"}, "high_level": {"method": "CCSD"},
+            "conv_tol_Ha": 1e-9, "n_cores": 1, "timeout_s": 60,
+            "validation": {"bond_hops_series": list(series), "reference_benchmarks": list(benchmarks)}}
+
+
+def write_toy_embedding_project(dst, **protocol) -> Path:
+    """The Milestone B toy (one 2x2x1 cell, four Zn nodes) with protocols.embedding and a cluster-job budget."""
+    dst = Path(dst)
+    (dst / "tools").mkdir(parents=True, exist_ok=True)
+    shutil.copy(HERE / "mock_cluster.py", dst / "tools/mock_cluster.py")
+    return write_toy_project(dst, {"protocols": {"embedding": embedding_protocol(dst, **protocol)},
+                                   "budgets": {"max_active_space_jobs": 50}})

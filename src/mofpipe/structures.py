@@ -21,7 +21,17 @@ def composition_of(spec, topology) -> dict:
 
 
 def states_of(spec, topology):
-    return feasible_states(topology.n_sites, n_ones_of(spec, topology))
+    states = feasible_states(topology.n_sites, n_ones_of(spec, topology))
+    if not topology.sublattice_counts:
+        return states
+    return (b for b in states if all(sum(b[i] for i in sites) == k for sites, k in topology.sublattice_counts))
+
+
+def require_single_count(topology, solver: str) -> None:
+    """Solvers whose moves or bounds assume one global count refuse per-sublattice constraints."""
+    if topology.sublattice_counts:
+        raise PipelineError("UNSUPPORTED_SUBLATTICE_CONSTRAINTS",
+                            f"{solver} assumes one global count; {topology.topology_id} declares {len(topology.sublattice_counts)}")
 
 
 def validate_occupation(bits, n_sites: int, n_ones: int) -> tuple:

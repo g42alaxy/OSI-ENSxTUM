@@ -45,7 +45,8 @@ NOT_YET_SUPPORTED = {  # field -> (code, task) when set to a non-empty value
     "search.orientation_catalog_id": ("UNSUPPORTED_ORIENTATION_CATALOG", "T01.4"),
     "protocols.ml_potential_checkpoint": ("UNSUPPORTED_ML_POTENTIAL", "T02.2"),
     "protocols.ml_calibration": ("UNSUPPORTED_ML_POTENTIAL", "T02.3"),
-    "protocols.embedding": ("UNSUPPORTED_ELECTRONIC_BACKEND", "T07.1"),
+    # protocols.embedding (Milestone E) is validated by embedding.protocol_errors; an embedded cluster active space
+    # is declared inside it (high_level.active_space). A stand-alone MOF active-space protocol is not implemented.
     "protocols.active_space": ("UNSUPPORTED_ELECTRONIC_BACKEND", "T07.1"),
     "runtime.llm_provider": ("AGENT_LAYER_NOT_IMPLEMENTED", "T10.2"),
     "runtime.llm_model": ("AGENT_LAYER_NOT_IMPLEMENTED", "T10.2"),
@@ -249,11 +250,15 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
     if len(quantum) > 1:
         errors.append(_err("UNSUPPORTED_QUANTUM_BACKEND", "protocols.quantum_solvers", "one QAOA simulation protocol"))
     for i, q in enumerate(quantum[:1]):
-        errors += [_err("SCIENTIFIC_SPEC_MISSING", f"protocols.quantum_solvers[{i}].{k}") for k in quantum_errors(q)]
+        errors += [_err(code, f"protocols.quantum_solvers[{i}].{k}") for code, k in quantum_errors(q)]
     if (protocols.get("encoding") or {}).get("higher_order", "retain_HUBO_or_explicitly_reject") not in (
             "retain_HUBO_or_explicitly_reject", "quadratize"):
         errors.append(_err("UNSUPPORTED_ENCODING_POLICY", "protocols.encoding.higher_order",
                            str(protocols["encoding"]["higher_order"])))
+    if protocols.get("embedding"):
+        from .embedding import protocol_errors as embedding_errors
+        errors += [_err(code, path, detail) for code, path, detail in
+                   embedding_errors(protocols["embedding"], protocols.get("dft") or {}, config.get("budgets") or {}, root)]
     if (config.get("runtime") or {}).get("engine") not in (None, "local", "aiida_recommended"):
         errors.append(_err("UNSUPPORTED_WORKFLOW_ENGINE", "runtime.engine", str(config["runtime"]["engine"])))
 
@@ -326,7 +331,7 @@ def load_physical_project(project_path: Path, config: dict) -> ProjectSpec:
         "candidate_pool": {"top_k_unique_orbits_per_topology": acquisition.get("top_k_unique_orbits_per_topology"),
                            "retain_all_score_ties": True},
         "evaluation": {"backend": "periodic_dft", "correction_mode": "none", "dft_enabled": True,
-                       "embedding_enabled": False, "hardware_enabled": False},
+                       "embedding_enabled": bool(protocols.get("embedding")), "hardware_enabled": False},
         "active_learning": {"mode": "disabled_milestone_B", "max_iterations_if_enabled": 0},
         "literature": {"mode": "static_manifest", "live_review_enabled": False},
         "inputs": {},

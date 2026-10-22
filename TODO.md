@@ -5,6 +5,8 @@ This file explains every `#TODO` marker in `src/mofpipe/`. The pipeline runs end
 - physical projects: CIF input → slot lattices → built frameworks → periodic DFT labels → grouped-validated models → DFT-ranked candidates.
   - Milestone B covers a single topology.
   - Milestone C adds several topologies, transferable cluster features, supercell transfer checks, acquisition and refinement, relaxed-geometry dedup, references, validation and the report.
+  - Milestone D adds quadratization, sublattice constraints, branch and bound, a QAOA simulation benchmark, active-space export and ED/CASCI/VQE/SQD solvers.
+  - Milestone E adds the finite-cluster subtractive embedding: corrected-energy assembly, scheme validation and a corrected ranking next to the DFT one.
 
 Periodic DFT runs through PySCF (GPW, CPU/GPU) or a Quantum ESPRESSO adapter. Physical results so far come from SYNTHETIC toys (`tests/toy_framework.py` with a mock `pw.x`; `tests/pyscf_toy.py` with real PySCF). Real MOF-5 runs still need the inputs listed under **Needs**.
 
@@ -29,34 +31,34 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 | T01.1 | 01 | Full ProjectSpec and physical-case loader | — | **Done (B, C: several topologies)** |
 | T01.2 | 01 | CIF / periodic-net input mode | — | **Done (B)** |
 | T01.3 | 01 | Atomic framework construction | [framework.py:571](src/mofpipe/framework.py#L571) | **Done (B)**; PORMAKE wiring open |
-| T01.4 | 01 | Linker orientation states | [structures.py:67](src/mofpipe/structures.py#L67) | open |
-| T01.5 | 01/05 | Supercells and periodic translations | [structures.py:81](src/mofpipe/structures.py#L81) | **Done (C)** for diagonal supercells; non-diagonal open |
-| T02.1 | 02 | Seed decoration generation | [structures.py:149](src/mofpipe/structures.py#L149) | open |
-| T02.2 | 02 | ML-potential relaxation | [structures.py:150](src/mofpipe/structures.py#L150) | open |
-| T02.3 | 02 | ML calibration against DFT and screening decisions | [structures.py:152](src/mofpipe/structures.py#L152) | open |
+| T01.4 | 01 | Linker orientation states | [structures.py:77](src/mofpipe/structures.py#L77) | open |
+| T01.5 | 01/05 | Supercells and periodic translations | [structures.py:91](src/mofpipe/structures.py#L91) | **Done (C)** for diagonal supercells; non-diagonal open |
+| T02.1 | 02 | Seed decoration generation | [structures.py:159](src/mofpipe/structures.py#L159) | open |
+| T02.2 | 02 | ML-potential relaxation | [structures.py:160](src/mofpipe/structures.py#L160) | open |
+| T02.3 | 02 | ML calibration against DFT and screening decisions | [structures.py:162](src/mofpipe/structures.py#L162) | open |
 | T03.1 | 03 | Cluster-feature generation from the slot lattice | [configuration_model.py:17](src/mofpipe/configuration_model.py#L17) | **Done (C)** for point/pair orbits; triplets, orientation open |
 | T03.2 | 03 | Model validation for real (noisy) data | — | **Done (B)**; transfer metric added (C) |
 | T03.3 | 03 | Uncertainty calibration and multifidelity models | [configuration_model.py:325](src/mofpipe/configuration_model.py#L325) | open |
 | T03.4 | 03 | Quadratization of higher-order models | — | **Done (D)** for cubic models |
-| T03.5 | 03/04 | Multicomponent encodings and penalty bounds | [intake.py:289](src/mofpipe/intake.py#L289) | **Done (D)** at the encoding layer; pipeline-wide multicomponent open |
+| T03.5 | 03/04 | Multicomponent encodings and penalty bounds | [intake.py:292](src/mofpipe/intake.py#L292) | **Done (D)** at the encoding layer; pipeline-wide multicomponent open |
 | T04.1 | 04 | Exact solver for large cells | [optimization.py:92](src/mofpipe/optimization.py#L92) | **Done (D)**: branch and bound with gaps; Job return, stronger bounds open |
 | T04.2 | 04 | QAOA simulation | — | **Done (D)** |
-| T04.3 | 04 | QPU hardware adapter | [optimization.py:167](src/mofpipe/optimization.py#L167) | open |
+| T04.3 | 04 | QPU hardware adapter | [optimization.py:168](src/mofpipe/optimization.py#L168) | open |
 | T05.1 | 05 | Geometry-level deduplication | [candidates.py:19](src/mofpipe/candidates.py#L19) | **Done (C)**; non-diagonal canonicalisation open |
 | T05.2 | 05 | Evaluation-batch acquisition policy | [candidates.py:46](src/mofpipe/candidates.py#L46) | **Done (C)** for training acquisition; finalist-pool budget open |
 | T06.1 | 06 | Periodic DFT backend | [dft.py:75](src/mofpipe/dft.py#L75), [dft.py:229](src/mofpipe/dft.py#L229), [dft.py:429](src/mofpipe/dft.py#L429) | **Done (B, C: PySCF GPW engine, CPU/GPU)**; DFT+U/hybrids in PySCF, k-point study, HPC open |
-| T06.2 | 01/06/07 | Real evaluation path in the orchestrator | [orchestrator.py:543](src/mofpipe/orchestrator.py#L543) | **Done (B)**; embedding hook open (T07.3) |
+| T06.2 | 01/06/07 | Real evaluation path in the orchestrator | — | **Done (B)**; embedding stage added (E) |
 | T06.3 | 06 | GPU path validation | [dft.py:229](src/mofpipe/dft.py#L229) | written against gpu4pyscf 1.8, **not exercised** (no CUDA device) |
-| T07.1 | 07 | Embedding scheme and active-space export | [active_space.py:45](src/mofpipe/active_space.py#L45) | **Done (D)** for bare systems; embedding open (E) |
-| T07.2 | 07 | Electronic solvers: CASCI/FCI, VQE, SQD | [electronic_solvers.py:237](src/mofpipe/electronic_solvers.py#L237) | **Done (D)** in simulation; hardware SQD open |
-| T07.3 | 07 | Corrected-energy assembly | [electronic.py:23](src/mofpipe/electronic.py#L23), [intake.py:354](src/mofpipe/intake.py#L354) | open |
+| T07.1 | 07 | Embedding scheme and active-space export | [active_space.py:45](src/mofpipe/active_space.py#L45) | **Done (D)** for bare systems; **(E)** capped node clusters for the subtractive scheme; WF-in-DFT open |
+| T07.2 | 07 | Electronic solvers: CASCI/FCI, VQE, SQD | [electronic_solvers.py:242](src/mofpipe/electronic_solvers.py#L242) | **Done (D)** in simulation; hardware SQD open |
+| T07.3 | 07 | Corrected-energy assembly | [electronic.py:24](src/mofpipe/electronic.py#L24) | **Done (E)** for the finite-cluster subtractive scheme; WF-in-DFT and Fe–MOF-74 reference open |
 | T08.1 | 08 | Active-learning acquisition policy | [refinement.py:21](src/mofpipe/refinement.py#L21) | **Done (C)** for physical projects |
 | T08.2 | 08 | Stopping criteria | [refinement.py:90](src/mofpipe/refinement.py#L90) | **Done (C)**; solver-gap accounting, model-family expansion open |
 | T09.1 | 09 | Structural validation tool wrappers | [ranking.py:83](src/mofpipe/ranking.py#L83) | **Done (C)**: in-house checks + optional MOFChecker/Zeo++; CrystalNets, phonons, PXRD open |
 | T09.2 | 09 | Reference-phase competition | — | **Done (C)** for pure-endpoint references |
-| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:145](src/mofpipe/report.py#L145), [intake.py:359](src/mofpipe/intake.py#L359) | open |
+| T09.3 | 09 | Benchmarks, ablations, literature review | [report.py:171](src/mofpipe/report.py#L171), [intake.py:369](src/mofpipe/intake.py#L369) | open |
 | T10.1 | 10 | AiiDA workflow engine and concurrency | [orchestrator.py:18](src/mofpipe/orchestrator.py#L18), [dft.py:429](src/mofpipe/dft.py#L429) | open |
-| T10.2 | 10 | Runtime agent layer | [gateway.py:52](src/mofpipe/gateway.py#L52), [intake.py:273](src/mofpipe/intake.py#L273) | open |
+| T10.2 | 10 | Runtime agent layer | [gateway.py:52](src/mofpipe/gateway.py#L52), [intake.py:276](src/mofpipe/intake.py#L276) | open |
 
 ---
 
@@ -195,10 +197,10 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
 ### T03.5 Multicomponent encodings and penalty bounds — done at the encoding layer (Milestone D)
 - **Where:** `encoding.count_constraints`, `encoding.single_flip_bound`, `encoding.compile_one_hot` / `verify_one_hot` / `one_hot_states`.
 - **Implemented:**
-  - One count constraint per substituted sublattice (`TopologySpec.sublattice_counts` when declared, otherwise one global count).
+  - One count constraint per substituted sublattice (`TopologySpec.sublattice_counts`, otherwise one global count). Exact enumeration visits only states meeting every count; branch and bound and the QAOA exchange mixer assume one global count and refuse declared sublattices (`UNSUPPORTED_SUBLATTICE_CONSTRAINTS`). No loader populates the field yet.
   - Auditable penalty bound, for cells too large to enumerate: λ > L = max_i Σ_{terms ∋ i}|c| guarantees a feasible penalised minimum, since a violation d costs λd² ≥ λd > dL. Every `EncodingArtifact.penalty_bound` records L and whether λ is certified. The exhaustive check states when the bound alone was insufficient.
   - One-hot QUBO for more than two species per slot: one-per-slot plus per-species count constraints, with an exhaustive certification for ≤ 20 variables.
-- **Still open:** multicomponent decorations, features and enumeration across the pipeline (intake is still binary; [intake.py:289](src/mofpipe/intake.py#L289)); a one-hot penalty bound (only exhaustive certification exists).
+- **Still open:** multicomponent decorations, features and enumeration across the pipeline (intake is still binary; [intake.py:292](src/mofpipe/intake.py#L292)); sublattice counts from the project spec, in branch and bound and in the mixer; a one-hot penalty bound (only exhaustive certification exists).
 
 ## Task 04 — Arrangement solvers
 
@@ -218,7 +220,8 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Exact statevector simulation inside the feasible subspace. The XY exchange mixer is a product of rotations over `pairs_d1` edges, generalised to species exchanges for one-hot slots. The initial state is uniform over the feasible states (a Dicke state for binary slots).
   - The phase separator is the encoding's diagonal. Every sample is decoded and re-evaluated with the physical Hamiltonian. A mismatch raises `ENCODING_DECODE_MISMATCH`, which catches bit-order and ancilla errors.
   - `verify_mixer_preserves_constraints` checks the full qubit register (binary and one-hot); the X mixer fails it. Mixer-graph reachability is checked too.
-  - Records bit order, qubits, depth and gates per layer, shots, seeded Nelder–Mead calls, post-selection rate and wall times (solver-only and end-to-end).
+  - Records bit order, qubits (decision variables only; quadratization ancillas are recorded but not in the circuit), depth and gates per layer, shots, seeded Nelder–Mead calls, post-selection rate and wall times (solver-only and end-to-end).
+  - The protocol needs positive integer `layers`, `shots`, `restarts`, `max_evaluations` and a non-empty integer `seeds` list (`SCIENTIFIC_SPEC_MISSING`); a `kind` other than `qaoa_simulation` is `UNSUPPORTED_QUANTUM_BACKEND`.
   - Benchmark across seeds against exact enumeration and simulated annealing: best and median sample, success probability. Labelled "not evidence of quantum speedup".
 - **Result:** on the fixture (p = 2, 200 shots) every seed's best sample is the exact minimum, with median success probability 0.11–0.23 against 0.002 for uniform sampling.
 - **Still open:** compiled Dicke-state preparation and a circuit-level (ancilla-qubit) simulation of quadratized QUBOs; noise models.
@@ -295,7 +298,7 @@ From `instructions/00_SHARED_CONTRACT.md`, as already implemented in `contract.p
   - Pool evaluation: the same chain for the candidate pool. Already-labelled candidates come from the job cache.
   - `BuildFailure`, failed and transformed calculations are recorded and become missing evaluations; the ranking is then `INCOMPLETE`.
   - The ranking is DFT-only, at base level, with tolerance ties. The corrected ranking is `DISABLED_BY_CONFIG`.
-- **To do:** Optional embedding correction per candidate geometry once T07.3 exists ([orchestrator.py:349](src/mofpipe/orchestrator.py#L349)).
+- **Milestone E:** the `embedding` stage (T07.3) corrects the evaluated pool; the ranking stage adds a corrected ranking only when the scheme is validated.
 
 ## Task 07 — Embedding and electronic solvers
 
@@ -306,9 +309,10 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
 - **Implemented:**
   - `prepare_active_space(system, protocol)` takes one specific geometry with its calculation ID and runs the declared RHF/ROHF reference.
   - It exports h1 (including the frozen core), h2 (chemists' notation), E_core, electron counts by spin, orbital ordering, the integral convention, geometry/basis/protocol hashes, and per-atom Mulliken orbital character, as FCIDUMP plus an `ActiveSpaceArtifact`.
-  - Identical inputs reproduce identical integrals, FCIDUMP SHA-256 and artifact ID. The FCIDUMP round-trips to 10⁻¹².
-- **Still open (Milestone E):** an embedding scheme (`embedding` other than `none` gives `UNSUPPORTED_EMBEDDING`); active spaces of MOF cluster cuts with capping; a balanced metal/ligand/neighbour-node orbital selection policy (only frontier windows or explicit orbital lists exist).
-- **Needs:** the team's frozen total-energy expression for the embedding.
+  - Identical inputs reproduce identical integrals, FCIDUMP SHA-256 and artifact ID. The reference and integral steps run on one OpenMP thread: threaded reductions differed by ~10⁻¹⁴ Ha between runs and changed the stored integrals and artifact ID (fixed after the Milestone D review). The FCIDUMP round-trips to 10⁻¹².
+  - Milestone E: node-centred capped clusters of MOF geometries (`embedding.cut_region`) can be solved through an active space (`high_level.method: active_space`) by any T07.2 solver.
+- **Still open:** active spaces in an embedding potential (WF-in-DFT; `embedding` other than `none` gives `UNSUPPORTED_EMBEDDING`); a balanced metal/ligand/neighbour-node orbital selection policy (only frontier windows or explicit orbital lists exist).
+- **Needs:** the team's choice of a WF-in-DFT formalism if one is wanted beyond the subtractive scheme.
 
 ### T07.2 Electronic solvers — done in simulation (Milestone D); hardware SQD open
 - **Where:** `electronic_solvers.py`; benchmark runner `run_electronic_benchmark`, CLI `python -m mofpipe electronic-benchmark`.
@@ -318,19 +322,44 @@ This is a research milestone, not API wiring. The embedding formalism must be sp
   - Simulated VQE: Jordan–Wigner, interleaved α/β qubit order, no tapering, (N_α, N_β) sector from the HF determinant, spin-orbital UCCSD, BFGS. It is a variational upper bound and is never called exact.
   - SQD from simulated samples, with declared bit-flip noise, configuration recovery and subspace diagonalisation. Shots, recovery count, subspace size and seeds are recorded.
   - `sqd_hardware` reports `BLOCKED`: no QPU backend is configured.
+- **Consistency gate** (added after the Milestone D review): `REPRODUCED` also requires ED and CASCI to agree within 10⁻⁸ Ha and VQE/SQD not to fall below them. SQD records the result whose state it sampled; the VQE it samples from is always stored.
 - **Published benchmark:** `benchmarks/h2_sto3g_szabo_ostlund.json`, minimal-basis H₂ at R = 1.4 a₀. HF is −1.11671 Ha against the published −1.1167, and full CI −1.13728 against −1.1373, within the published 4-decimal precision. ED, CASCI, VQE and SQD agree. Status `REPRODUCED`; this is reproduction of a calculation, not agreement with experiment.
-- **Still open:** hardware SQD adapter ([electronic_solvers.py:237](src/mofpipe/electronic_solvers.py#L237)); benchmarks with strong correlation (open-shell Fe–MOF-74 is Milestone E); approximate references (DMRG, SHCI) for larger spaces.
+- **Still open:** hardware SQD adapter ([electronic_solvers.py:237](src/mofpipe/electronic_solvers.py#L237)); benchmarks with strong correlation (open-shell Fe–MOF-74); approximate references (DMRG, SHCI) for larger spaces.
 
-### T07.3 Corrected-energy assembly
-- **Where:** `electronic.py` header
-- **To do:**
-  - Implement the scheme's own `assemble_corrected_energy`, with no overlapping-region double counting and every inequivalent node in the compared cell included.
-  - Emit corrected energies only when the assembler and comparison group are validated. Otherwise return a benchmark artifact with `correction_status=UNVALIDATED` and keep a DFT-only ranking.
-- **Done when:**
-  - The high = low consistency test passes where the formalism requires it.
-  - An unchanged correction leaves the ranking unchanged. This is already tested for the synthetic constant correction.
-  - Missing subtraction terms or incomplete node coverage block assembly.
-  - At least one published embedding reference (the Fe–MOF-74 workflow) is reproduced.
+### T07.3 Corrected-energy assembly — done for the finite-cluster subtractive scheme (Milestone E)
+- **Where:** `embedding.py` (`plan_regions`, `cut_region`, `ClusterBackend`, `assemble_corrected_energy`, `validate_scheme`, `correct_pool`, `run_embedding_benchmark`), `cluster_worker.py`; the `embedding` stage between `evaluation` and `ranking`; CLI `python -m mofpipe embedding-benchmark`.
+- **Scheme** (`protocols.embedding.scheme: finite_cluster_subtractive`, labelled a finite-cluster mechanical embedding, not WF-in-DFT). The frozen expression is stored in every plan, correction and validation record:
+  - E_corr[c] = E_PBC^low[c] + Σ_k m_k (E_high[C_k] − E_low[C_k]).
+  - Environment: the periodic DFT cell. No embedding potential couples the regions.
+  - Regions: one per metal node of the relaxed cell. A region is the node atoms, every atom within `region.bond_hops` bonds, and terminal atoms bonded to those. Each bond leaving a region is capped by `capping.element` at `capping.distance_A[kept element]`. Translation-equivalent clusters (1e-4 Å) share one calculation with multiplicity m_k.
+  - E_low is the periodic functional and dispersion in the cluster basis; E_high is HF, MP2, CCSD, CCSD(T), or an active space solved by a T07.2 solver. Both use the same basis, ECP, charge and spin.
+- **Assembly** returns `CorrectedEnergy`, an `EmbeddingBenchmarkResult` (`correction_status=UNVALIDATED`, never applied), or a `BlockedResult`. Blocking codes:
+  - `INCOMPATIBLE_GEOMETRY`: the plan was not cut from this calculation's relaxed geometry.
+  - `INCOMPLETE_NODE_COVERAGE`: some node of the cell has no region, or the node count changed.
+  - `MISSING_SUBTRACTION_TERM` / `MISSING_HIGH_LEVEL_TERM`; `INCOMPATIBLE_CLUSTER_PAIR` (basis, charge, spin or protocol differ).
+  - `OVERLAPPING_REGIONS` (would double count), `REGION_EXCEEDS_CELL` (the region wraps around the periodic cell), `CAPPING_RULE_MISSING`.
+- **Intake:** every field is required, nothing is defaulted. The low level must equal `protocols.dft` (`EMBEDDING_LOW_LEVEL_MISMATCH`). `validation.bond_hops_series` must contain `region.bond_hops` and a larger value. `validation.reference_benchmarks` must name existing files (`[]` is allowed and leaves every correction UNVALIDATED). Cluster jobs count against `budgets.max_active_space_jobs`.
+- **Cluster jobs** use `submit → job_status → collect` with an idempotency key from the protocol hash, role and canonical cluster. The engine is the PySCF worker or an external command, and the worker or engine script hash is part of the embedding fidelity.
+- **Validation** (`EmbeddingValidationReport`; VALIDATED only if all four pass):
+  - high = low: the low level resubmitted as the high level gives |Δ| ≤ 10⁻⁸ Ha.
+  - balanced regions: identical region inventory per formula unit in every candidate.
+  - boundary convergence: the relative correction between the two lowest DFT candidates, over `bond_hops_series`, within `target_relative_energy_tolerance`.
+  - reference benchmarks: every declared benchmark is `REPRODUCED`.
+- **Ranking feedback:** when VALIDATED, corrected energies (fidelity `DFT:…+EMB:…`) give a corrected pooled ranking next to the DFT one, with `ranking_changed_by_correction`. The reference-phase competition stays at the DFT level. A blocked or unvalidated embedding never stops the DFT-only ranking.
+- **Reference benchmark** (`benchmarks/embedding_keto_enol_hf_ccsd.json`): propanal vs (E)-prop-1-en-1-ol, CCSD/6-31G. The region is the C–C(=O)/C=C–OH fragment and the methyl group is capped.
+  - The reference is an independent full-molecule CCSD on the same idealised geometries, not a published value.
+  - Embedded relative-energy error: 0.25 mHa. HF alone is off by 2.36 mHa, against a 1.6 mHa (1 kcal/mol) tolerance, so the benchmark discriminates.
+  - Exact limit: a region covering the whole molecule reproduces the full CCSD energy to 10⁻¹⁴ Ha.
+  - HF is the low level because PBE already matches CCSD for this pair within 0.2 mHa.
+- **Toy result (SYNTHETIC, mock engine):**
+  - With `bond_hops: 1`, the two-hop region of the one-cell-thick toy wraps around c. The boundary study is then `NOT_ASSESSABLE` and the run stays DFT-only.
+  - With `bond_hops: 0` and the reference benchmark, the scheme is VALIDATED. Every node cluster is identical, so the correction per formula unit is a constant, and the corrected order, ties and winner equal the DFT ones (the "unchanged correction" acceptance test).
+- **Still open:**
+  - The published Fe–MOF-74 embedding workflow. It needs the paper's data and an HF-embedding mode; HF-embedded correlation cannot be added to DFT.
+  - WF-in-DFT (projection-based) embedding.
+  - Overlapping regions through inclusion–exclusion (now blocked).
+  - Alternative cluster spin states, cluster basis-set convergence, corrected reference phases.
+- **Needs:** the real high level, cluster charge and spin, capping distances, region size, and a reference benchmark for the chosen chemistry.
 
 ## Task 08 — Adaptive refinement
 
@@ -434,10 +463,11 @@ These came out of the instruction-set review and must be settled in `instruction
   - seed sampling and screening policies (T02.1, T02.3)
   - ranking comparison policy (tie tolerance currently reuses `target_relative_energy_tolerance`)
   - electronic solver protocols for CASCI, VQE and SQD (T07.2)
+  - the embedding protocol shape (T07.3): `protocols.embedding` (scheme, engine, region, capping, cluster charge/spin, basis, low/high levels, validation) and `budgets.max_active_space_jobs` as the cluster-job budget
   - split manifest path in the fixture `project.json` (T01.1) — unchanged because the fixture is checksummed.
 - **Signature ambiguities:**
   - `prepare_active_space` should take a geometry/calculation ID, not a candidate ID (T07.1).
-  - `assemble_corrected_energy` needs a third outcome, the `UNVALIDATED` benchmark artifact (T07.3).
+  - ~~`assemble_corrected_energy` needs a third outcome~~ — it returns `CorrectedEnergy`, an `UNVALIDATED` `EmbeddingBenchmarkResult` or a `BlockedResult` (T07.3).
   - `select_evaluation_batch` (05) and `plan_next_batch` (08) both produce `AcquisitionBatch`; decide which owns it.
   - `advance_workflow` must stay controller-only. `gateway.CONTROLLER_ONLY` already enforces this.
 - **Physical tolerances:** energy tie tolerance, force/stress tolerances, low-energy validation criterion and stable-round count are `null` in the template and must be chosen per study.
@@ -448,7 +478,7 @@ Already resolved in code, and worth proposing back into `00_SHARED_CONTRACT.md`:
 
 ## Suggested order
 
-Following the milestones in `instructions/10_AGENT_ARCHITECTURE.md`. Milestones A, B, C and D are done in software:
+Following the milestones in `instructions/10_AGENT_ARCHITECTURE.md`. Milestones A–E are done in software:
 - A: the synthetic end-to-end fixture;
 - B: T01.1–T01.3, T06.1, T06.2, T03.2;
 - C: T01.5, T03.1, T05.1, T05.2, T08.1, T08.2, T09.1 (in-house + optional tools), T09.2 (pure endpoints), plus the PySCF engine.
@@ -457,5 +487,5 @@ They are verified on SYNTHETIC toys. Running MOF-5 BDC/NH₂-BDC needs: the veri
 
 1. **Before real runs:** T06.3 (GPU validation on a CUDA host), Gaussian-basis and k-point convergence studies, non-diagonal supercells if the MOF-5 primitive/conventional relation needs them.
 2. **Milestone D — done:** T03.4 (cubic quadratization), T03.5 (sublattice constraints, penalty bound, one-hot at the encoding layer), T04.1 (branch and bound), T04.2 (QAOA simulation benchmark), T07.1–T07.2 (active-space export and ED/CASCI/VQE/SQD, H₂/STO-3G published benchmark reproduced).
-3. **Milestone E:** T07.3, embedding corrections fed back into ranking.
+3. **Milestone E — done:** T07.3 for the finite-cluster subtractive scheme (assembly, validation, corrected ranking), checked against an independent full-CCSD benchmark. Still open: the published Fe–MOF-74 reference and WF-in-DFT.
 4. **Milestone F:** T10.1, T10.2, T04.3, T09.3.

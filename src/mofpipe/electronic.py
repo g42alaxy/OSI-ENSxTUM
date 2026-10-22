@@ -18,10 +18,11 @@ from .structures import configuration_id, n_ones_of, orbit_id, validate_occupati
 EVALUATOR_SCRIPT = "tools/mock_evaluator.py"
 
 # Periodic DFT (Task 06) lives in dft.py (PeriodicDFTBackend) behind the same submit/job_status/collect interface.
-# Active-space export (T07.1) is active_space.py; ED/CASCI/VQE/SQD (T07.2) are electronic_solvers.py and run as
-# benchmarks (python -m mofpipe electronic-benchmark). They do not touch MOF rankings yet.
-#TODO: Task 07 — embedding scheme and the scheme's own assemble_corrected_energy (double counting, all
-#TODO: inequivalent nodes, UNVALIDATED status) before any correction enters a ranking (T07.3, Milestone E).
+# Active-space export (T07.1) is active_space.py; ED/CASCI/VQE/SQD (T07.2) are electronic_solvers.py. The
+# finite-cluster subtractive embedding and its assembler (T07.3) are embedding.py, run as the "embedding" stage of
+# physical projects; corrections reach a ranking only when the scheme is VALIDATED.
+#TODO: Task 07 — WF-in-DFT (projection) embedding and the published Fe-MOF-74 reference; only the finite-cluster
+#TODO: subtractive scheme exists, validated against an independent full-system calculation.
 
 
 class SyntheticFixtureBackend:
@@ -135,10 +136,12 @@ def electronic_stage_status(spec) -> dict:
     physical = ev["backend"] == "periodic_dft"
     return {
         "periodic_dft": off if not ev["dft_enabled"] else (StageStatus.COMPLETED.value if physical else StageStatus.UNSUPPORTED.value),
-        "embedding_correction": off if not ev["embedding_enabled"] else StageStatus.UNSUPPORTED.value,  #TODO: Task 07
-        # Solvers exist (electronic_solvers.py) but need an embedded active space of the MOF geometry (T07.3).
+        "embedding_correction": off if not ev["embedding_enabled"] else
+        ("SEE_EMBEDDING_STAGE" if physical else StageStatus.UNSUPPORTED.value),
+        # Cluster active spaces run inside the embedding stage when protocols.embedding.high_level is active_space.
         "active_space_fci": StageStatus.NOT_RUN.value, "vqe": StageStatus.NOT_RUN.value,
         "sqd_hardware": off if not ev["hardware_enabled"] else StageStatus.UNSUPPORTED.value,
-        "note": ("DFT-only ranking; no correction is applied." if physical else
+        "note": (("DFT ranking; embedding corrections are assembled in the embedding stage and applied only when "
+                  "validated." if ev["embedding_enabled"] else "DFT-only ranking; no correction is applied.") if physical else
                  "Corrections in this run are artificial fixture bookkeeping tests, not electronic-structure results."),
     }

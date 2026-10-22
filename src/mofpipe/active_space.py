@@ -42,12 +42,12 @@ def prepare_active_space(system: dict, protocol: dict) -> dict:
     _require(system, SYSTEM_REQUIRED, "system")
     _require(protocol, PROTOCOL_REQUIRED, "protocol")
     if protocol["embedding"] != "none":
-        #TODO: Task 07 — embedded active spaces (environment, coupling, capping terms) need the team's frozen
-        #TODO: total-energy expression; only bare molecules/clusters are exported now.
+        #TODO: Task 07 — active spaces in an embedding potential (WF-in-DFT); the finite-cluster subtractive
+        #TODO: scheme (embedding.py) exports bare capped clusters, which is what 'none' means here.
         raise PipelineError("UNSUPPORTED_EMBEDDING", f"{protocol['embedding']}: only 'none' is implemented")
     try:
         import numpy as np
-        from pyscf import __version__ as pyscf_version, gto, mcscf, scf
+        from pyscf import __version__ as pyscf_version, ao2mo, gto, lib, mcscf, scf
         from pyscf.tools import fcidump
     except ImportError as exc:
         raise PipelineError("BACKEND_UNAVAILABLE", f"PySCF is required for active-space export: {exc}") from exc
@@ -55,22 +55,27 @@ def prepare_active_space(system: dict, protocol: dict) -> dict:
                 charge=system["charge"], spin=system["spin"], verbose=0)
     if protocol["reference"] not in ("RHF", "ROHF"):
         raise PipelineError("UNSUPPORTED_REFERENCE", protocol["reference"])
-    mf = (scf.RHF if protocol["reference"] == "RHF" else scf.ROHF)(mol)
-    mf.conv_tol = protocol.get("conv_tol", 1e-12)
-    mf.kernel()
-    if not mf.converged:
-        raise PipelineError("SCF_NOT_CONVERGED", system["system_id"])
-    ncas, nelecas = protocol["n_active_orbitals"], protocol["n_active_electrons"]
-    mc = mcscf.CASCI(mf, ncas, nelecas)
-    if protocol.get("active_orbitals") is not None:  # explicit 0-based MO indices
-        mo = mc.sort_mo(protocol["active_orbitals"], base=0)
-        selection = sorted(protocol["active_orbitals"])
-    else:
-        mo = mf.mo_coeff
-        selection = list(range(mc.ncore, mc.ncore + ncas))
-    h1, ecore = mc.get_h1eff(mo)
-    from pyscf import ao2mo
-    h2 = ao2mo.restore(1, mc.get_h2eff(mo), ncas)
+    # One OpenMP thread: threaded integral reductions differ at ~1e-14 Eh between runs, which would change the
+    # stored integrals, the FCIDUMP hash and the artifact ID for identical inputs.
+    with lib.with_omp_threads(1):
+        mf = (scf.RHF if protocol["reference"] == "RHF" else scf.ROHF)(mol)
+        mf.conv_tol = protocol.get("conv_tol", 1e-12)
+        mf.kernel()
+        if not mf.converged:
+            raise PipelineError("SCF_NOT_CONVERGED", system["system_id"])
+        ncas, nelecas = protocol["n_active_orbitals"], protocol["n_active_electrons"]
+        chosen = protocol.get("active_orbitals")
+        if chosen is not None and (len(set(chosen)) != ncas or not all(type(i) is int and 0 <= i < mol.nao_nr() for i in chosen)):
+            raise PipelineError("INVALID_ACTIVE_SPACE", f"active_orbitals {chosen} must be {ncas} distinct MO indices")
+        mc = mcscf.CASCI(mf, ncas, nelecas)
+        if protocol.get("active_orbitals") is not None:  # explicit 0-based MO indices
+            mo = mc.sort_mo(protocol["active_orbitals"], base=0)
+            selection = sorted(protocol["active_orbitals"])
+        else:
+            mo = mf.mo_coeff
+            selection = list(range(mc.ncore, mc.ncore + ncas))
+        h1, ecore = mc.get_h1eff(mo)
+        h2 = ao2mo.restore(1, mc.get_h2eff(mo), ncas)
     nalpha, nbeta = mc.nelecas
     ms2 = nalpha - nbeta
     with tempfile.TemporaryDirectory() as tmp:
@@ -97,7 +102,7 @@ def prepare_active_space(system: dict, protocol: dict) -> dict:
         geometry_hash=content_hash(geometry), protocol=protocol, protocol_hash=content_hash(protocol),
         embedding={"scheme": "none", "note": "bare system; not an embedded correction"},
         correction_status="UNVALIDATED",
-        software={"pyscf": pyscf_version, "numpy": np.__version__},
+        software={"pyscf": pyscf_version, "numpy": np.__version__, "omp_threads": 1},
         basis={"name": protocol["basis"], "n_ao": mol.nao_nr(), "hash": content_hash([protocol["basis"], mol._basis])},
         mean_field={"method": protocol["reference"], "energy_Ha": float(mf.e_tot), "converged": bool(mf.converged),
                     "mo_energies_Ha": [round(float(e), 10) for e in mf.mo_energy]},

@@ -14,7 +14,7 @@ from fractions import Fraction
 from .configuration_model import predict
 from .contract import PipelineError, StageStatus, bit_string, make_record
 from .encoding import _IntPoly, complete_assignment
-from .structures import n_ones_of, states_of
+from .structures import n_ones_of, require_single_count, states_of
 
 
 def exact_enumeration(spec, topo, hamiltonian: dict, encoding: dict | None = None) -> dict:
@@ -91,6 +91,7 @@ def branch_and_bound(spec, topo, hamiltonian: dict, node_limit: int = 1_000_000,
     """
     #TODO: Task 04 — return a Job for solves longer than the stage budget; LP/SDP bounds for large cells.
     from .encoding import physical_polynomial
+    require_single_count(topo, "branch_and_bound")
     start = time.perf_counter()
     n, k = topo.n_sites, n_ones_of(spec, topo)
     poly = physical_polynomial(hamiltonian, topo)

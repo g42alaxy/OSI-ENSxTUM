@@ -2,6 +2,7 @@
 
 ``run`` also accepts a ProjectSpec v0.1 file or a physical_case recipe (physical projects).
 ``electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir DIR`` runs Task 07 solvers.
+``embedding-benchmark --spec benchmarks/embedding_keto_enol_hf_ccsd.json --run-dir DIR`` checks the T07.3 scheme.
 """
 from __future__ import annotations
 
@@ -48,6 +49,9 @@ def main(argv=None) -> int:
     e = sub.add_parser("electronic-benchmark", help="active-space export + ED/CASCI/VQE/SQD vs a published value")
     e.add_argument("--spec", required=True)
     e.add_argument("--run-dir", required=True)
+    b = sub.add_parser("embedding-benchmark", help="subtractive embedding vs an independent full high-level calculation")
+    b.add_argument("--spec", required=True)
+    b.add_argument("--run-dir", required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "electronic-benchmark":
@@ -56,6 +60,12 @@ def main(argv=None) -> int:
             report = run_electronic_benchmark(json.loads(Path(args.spec).read_text()), RunStore(args.run_dir))["report"]
             print(json.dumps({k: report[k] for k in ("benchmark_id", "status", "identical_problem", "comparisons",
                                                      "solver_status")}, indent=2))
+            return 0 if report["status"] == "REPRODUCED" else 1
+        if args.command == "embedding-benchmark":
+            from .embedding import run_embedding_benchmark
+            from .store import RunStore
+            report = run_embedding_benchmark(json.loads(Path(args.spec).read_text()), RunStore(args.run_dir))["report"]
+            print(json.dumps({k: report[k] for k in ("benchmark_id", "status", "relative_energy", "checks")}, indent=2))
             return 0 if report["status"] == "REPRODUCED" else 1
         if args.command == "matrix":
             rows = []

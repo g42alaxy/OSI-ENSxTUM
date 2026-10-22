@@ -54,9 +54,8 @@ def degree(poly: dict) -> int:
 
 def count_constraints(spec, topo) -> list:
     """[(sites, k)] per substituted sublattice; a single global count when the topology declares none."""
-    sublattices = getattr(topo, "sublattice_counts", None)
-    if sublattices:
-        return [(tuple(sites), k) for sites, k in sublattices]
+    if topo.sublattice_counts:
+        return [(tuple(sites), k) for sites, k in topo.sublattice_counts]
     return [(tuple(range(topo.n_sites)), n_ones_of(spec, topo))]
 
 

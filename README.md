@@ -20,6 +20,8 @@ PYTHONPATH=src python3 -m mofpipe accept --project mof_no_agent_fixture/project.
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs
 # Task 07 benchmark: active-space export + ED/CASCI/VQE/SQD vs the published minimal-basis H2 values
 PYTHONPATH=src python3 -m mofpipe electronic-benchmark --spec benchmarks/h2_sto3g_szabo_ostlund.json --run-dir runs/h2_benchmark
+# Task 07 embedding: finite-cluster subtractive scheme vs an independent full CCSD calculation (keto/enol)
+PYTHONPATH=src python3 -m mofpipe embedding-benchmark --spec benchmarks/embedding_keto_enol_hf_ccsd.json --run-dir runs/embedding_benchmark
 # physical plumbing toys with the mock pw.x: Milestone B (one topology) and Milestone C (two topologies, transfer cell, refinement)
 python3 -c "import sys; sys.path[:0] = ['tests']; import toy_framework as t; print(t.write_toy_project('runs/toy_b'), t.write_toy_milestone_c_project('runs/toy_c'))"
 PYTHONPATH=src python3 -m mofpipe run    --project runs/toy_c/project.json
@@ -52,6 +54,7 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 | acquisition policy (energy / uncertainty / diversity / audit) | `acquisition.py` | 05 |
 | evaluator boundary (fixture mock backend as subprocess) | `electronic.py` | 06/07 boundary |
 | active-space export (FCIDUMP + metadata); ED, PySCF CASCI, simulated VQE and SQD on one Hamiltonian | `active_space.py`, `electronic_solvers.py` | 07 |
+| finite-cluster subtractive embedding: capped node clusters, cluster jobs, corrected-energy assembly, scheme validation, corrected ranking | `embedding.py`, `cluster_worker.py` | 07 |
 | periodic DFT: engine adapters, jobs, cutoff convergence of energy differences | `dft.py`, `pyscf_worker.py` | 06 |
 | refinement: fixture active learning; physical rounds with declared stopping rules | `refinement.py`, `orchestrator.py` | 08 |
 | ranking, reference-phase competition, structural validation, report | `ranking.py`, `references.py`, `validation.py`, `report.py` | 09 |
@@ -59,4 +62,4 @@ Each run directory holds `state.json` (authoritative workflow state), `events.js
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for what each stage does and what every test checks, and [TODO.md](TODO.md) for every unimplemented part (`#TODO` markers in code) and what it requires.
 
-Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, ML potentials and screening, DFT+U and hybrid functionals in the PySCF engine, embedding and corrected-energy assembly, hardware SQD and QPU adapters, multicomponent decorations beyond the encoding layer, quartic quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, live literature review, runtime agents. MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.
+Not implemented: PORMAKE/ToBaCCo builders, linker orientation search, non-diagonal supercells, ML potentials and screening, DFT+U and hybrid functionals in the PySCF engine, WF-in-DFT embedding and the published Fe–MOF-74 embedding reference, hardware SQD and QPU adapters, multicomponent decorations beyond the encoding layer, quartic quadratization, triplet cluster orbits, CrystalNets/MOFid, phonons, PXRD/NMR, live literature review, runtime agents. MOFChecker and Zeo++ run only when installed. Anything not run is reported as `SKIPPED_*`, `DISABLED_BY_CONFIG`, `NOT_RUN` or `INCOMPLETE`, never as passed. The GPU path (`device: gpu`) follows the gpu4pyscf 1.8 API but has not been exercised: no CUDA device was available.

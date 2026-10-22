@@ -25,20 +25,27 @@ from itertools import product
 from .configuration_model import predict
 from .contract import PipelineError, StageStatus, bit_string, make_record
 from .encoding import evaluate_encoding, one_hot_states
-from .structures import n_ones_of
+from .structures import n_ones_of, require_single_count
 
 PROTOCOL_REQUIRED = ("layers", "shots", "seeds", "restarts", "max_evaluations")
 
 
 def protocol_errors(protocol: dict | None) -> list:
+    """[(code, field)]: missing or non-positive settings, and kinds other than the simulator."""
     if not protocol:
-        return ["protocol"]
-    missing = [k for k in PROTOCOL_REQUIRED if protocol.get(k) is None]
-    if not missing and (type(protocol["layers"]) is not int or protocol["layers"] < 1 or not protocol["seeds"]):
-        missing.append("layers/seeds")
+        return [("SCIENTIFIC_SPEC_MISSING", "protocol")]
+    errors = []
     if protocol.get("kind", "qaoa_simulation") != "qaoa_simulation":
-        missing.append(f"kind={protocol.get('kind')} (QPU hardware is T04.3)")
-    return missing
+        errors.append(("UNSUPPORTED_QUANTUM_BACKEND", f"kind={protocol.get('kind')} (QPU hardware is T04.3)"))
+    for k in PROTOCOL_REQUIRED:
+        value = protocol.get(k)
+        if k == "seeds":
+            ok = isinstance(value, list) and value and all(type(s) is int for s in value)
+        else:
+            ok = type(value) is int and value >= 1
+        if not ok:
+            errors.append(("SCIENTIFIC_SPEC_MISSING", k))
+    return errors
 
 
 # -- feasible subspace and mixer ---------------------------------------------------------------------------
@@ -152,6 +159,7 @@ def nelder_mead(f, x0: list, step: float, max_evaluations: int) -> tuple[list, f
 # -- QAOA on a pipeline Hamiltonian -------------------------------------------------------------------------
 def run_qaoa(spec, topo, hamiltonian: dict, encoding: dict, protocol: dict, seed: int) -> dict:
     """One seeded QAOA simulation: optimise angles, sample shots, decode and re-evaluate every sample."""
+    require_single_count(topo, "QAOA exchange mixer")
     t0 = time.perf_counter()
     states = [tuple(b) for b in one_hot_states(topo.n_sites, [topo.n_sites - n_ones_of(spec, topo), n_ones_of(spec, topo)])]
     encoded = [evaluate_encoding(encoding, s) for s in states]  # what the device's phase separator implements
@@ -233,8 +241,8 @@ def qaoa_benchmark(spec, topo, hamiltonian: dict, encoding: dict, exact: dict, p
                        "mixer": "product of XY exchange rotations over pairs_distance_1 in list order",
                        "initial_state": "uniform superposition over the feasible subspace (Dicke state, not compiled)",
                        "phase_separator": "encoding diagonal on decision variables, scaled to zero mean and unit spread",
-                       "bit_order": encoding["bit_order"], "n_qubits": topo.n_sites + len(encoding.get("ancillas", [])),
-                       "ancillas_in_circuit": False,
+                       "bit_order": encoding["bit_order"], "n_qubits": topo.n_sites,
+                       "encoding_ancillas_not_in_circuit": len(encoding.get("ancillas", [])),
                        "exchange_gates_per_layer": len(topo.pairs_d1)},
         mixer_constraint_check=check, mixer_reachability=reach, runs=runs, simulated_annealing=annealing,
         summary={"median_success_probability": success[len(success) // 2],

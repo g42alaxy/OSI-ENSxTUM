@@ -45,6 +45,9 @@ class TopologySpec:
     clusters: tuple = ()  # parent-lattice cluster orbits counted in this cell (clusters.supercell_clusters)
     supercell: tuple = ()  # diagonal supercell of the parent cell (CIF-derived lattices)
     parent_topology_id: str | None = None  # transfer cells: the working-cell topology they test
+    # ((sites, k), ...): one count constraint per substituted sublattice; empty = one global count (n_ones).
+    # No loader populates it yet; exact enumeration and the encoding honour it, branch and bound and QAOA refuse it.
+    sublattice_counts: tuple = ()
 
     @classmethod
     def from_dict(cls, d: dict) -> "TopologySpec":
@@ -332,8 +335,10 @@ def validate_project(spec: ProjectSpec) -> dict:
     check("optimizer_cross_checks", set(opt.get("cross_check_solvers", [])) <= {"branch_and_bound"}, "UNSUPPORTED_SOLVER",
           str(opt.get("cross_check_solvers")))
     from .qaoa import protocol_errors
-    check("quantum_protocol", opt.get("quantum_enabled") is False or not protocol_errors(opt.get("quantum_protocol")),
-          "SCIENTIFIC_SPEC_MISSING", f"optimizer.quantum_protocol: {protocol_errors(opt.get('quantum_protocol'))}")
+    quantum_errors = [] if opt.get("quantum_enabled") is False else protocol_errors(opt.get("quantum_protocol"))
+    detail = "optimizer.quantum_protocol: " + ", ".join(f"{c}: {f}" for c, f in quantum_errors)
+    for code in sorted({c for c, _ in quantum_errors}) or [None]:  # one check per error code; one passing check
+        check("quantum_protocol" + (f":{code}" if code else ""), code is None, code, detail)
     qubo = cfg.get("qubo", {})
     penalty = qubo.get("ratio_penalty_eV")
     check("qubo_format", qubo.get("format") == "upper_triangle_once", "UNSUPPORTED_ENCODING_FORMAT")
@@ -352,7 +357,8 @@ def validate_project(spec: ProjectSpec) -> dict:
     check("correction_mode", ev.get("correction_mode") in CORRECTION_MODES, "UNKNOWN_CORRECTION_MODE",
           str(ev.get("correction_mode")))
     # The fixture only uses its synthetic evaluator; periodic DFT runs in physical projects (dft.py).
-    #TODO: Task 07 — embedding and hardware backends.
+    # Embedding corrections exist for physical projects only (embedding.py); fixture corrections are synthetic.
+    #TODO: Task 07 — hardware (QPU) electronic backends.
     for flag in ("dft_enabled", "embedding_enabled", "hardware_enabled"):
         check(f"evaluation_{flag}_false", ev.get(flag) is False, "UNSUPPORTED_ELECTRONIC_BACKEND", flag)
     al = cfg.get("active_learning", {})

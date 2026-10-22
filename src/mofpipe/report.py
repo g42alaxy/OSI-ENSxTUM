@@ -26,9 +26,11 @@ def not_executed(spec) -> list:
         executed.add("quadratization of higher-order models")
     if spec.project_type == "synthetic_fixture":
         return [x for x in NOT_EXECUTED if x not in executed]
+    physical = spec.physical or {}
+    if (physical.get("protocols") or {}).get("embedding"):
+        executed.add("embedding correction")  # its validation status is in the embedding section
     out = [x for x in NOT_EXECUTED if x not in EXECUTED_IN_PHYSICAL_PROJECTS + PHYSICAL_EXECUTED + tuple(executed)]
     out += NOT_EXECUTED_PHYSICAL
-    physical = spec.physical or {}
     if not any((physical.get("transfer_topologies") or {}).values()):
         out.append("larger-supercell transfer test (T01.5): no transfer cell declared")
     if not (physical.get("protocols") or {}).get("stopping"):
@@ -80,7 +82,25 @@ def _physical_section(spec, store, ctx, detail) -> dict:
             "dft_jobs_submitted": store.state["counters"].get("dft_submissions", 0),
             "dft_cache_hits": store.state["counters"].get("dft_cache_hits", 0),
             "rerun": "python -m mofpipe run --project <project.json> --run-dir <dir>; identical inputs reuse every job"},
+        "embedding": _embedding_section(ctx, detail),
     }
+
+
+def _embedding_section(ctx, detail) -> dict | None:
+    validation = ctx.get("embedding_validation")
+    if validation is None:
+        return None
+    corrections = [v for k, v in sorted(ctx.items()) if k.startswith("correction/")]
+    return {"scheme": validation.get("scheme"), "label": validation.get("label"), "status": validation["status"],
+            "energy_expression": validation.get("energy_expression"), "unresolved": validation["unresolved"],
+            "checks": {k: v["status"] for k, v in validation["checks"].items()},
+            "boundary_convergence": validation["checks"].get("boundary_convergence"),
+            "reference_benchmarks": (validation["checks"].get("reference_benchmarks") or {}).get("benchmarks"),
+            "validation_id": validation["artifact_id"], "stage": (detail.get("embedding") or {}).get("ranking"),
+            "corrections": [{"orbit_id": c.get("orbit_id"), "record_type": c["record_type"],
+                             "correction_status": c.get("correction_status"),
+                             "correction_eV_per_fu": c.get("correction_eV_per_fu", c.get("unvalidated_correction_eV_per_fu")),
+                             "failure": c.get("failure"), "artifact_id": c["artifact_id"]} for c in corrections]}
 
 
 def _topology_section(spec, ctx, tid) -> dict:
@@ -139,7 +159,7 @@ def build_report(spec, store, ctx, detail, status) -> dict:
         stage_status=dict(status), completed_software_stages=sorted(executed),
         stage_detail={k: v for k, v in detail.items() if k in ("structures", "labels", "refinement", "model_selection",
                                                                "supercell_checks", "encoding", "optimization", "candidates",
-                                                               "evaluation", "ranking", "validation")},
+                                                               "evaluation", "embedding", "ranking", "validation")},
         topologies={tid: _topology_section(spec, ctx, tid) for tid in spec.topologies},
         winning_topology=(corrected or base or {}).get("winning_topology"),
         base_winning_topology=base["winning_topology"] if base else None,
@@ -176,7 +196,9 @@ def write_report(run_dir: Path, report: dict) -> None:
              (f"Pipeline status: **{report['pipeline_status']}** — winning topology (corrected pool): "
               f"**{report['winning_topology']}** (base: {report['base_winning_topology']})" if "physical" not in report else
               f"Pipeline status: **{report['pipeline_status']}** — lowest DFT energy (base level, ties within tolerance "
-              f"listed below): **{(report['base_ranking'] or [{}])[0].get('configuration_id')}**"), "", "## Stages", "",
+              f"listed below): **{(report['base_ranking'] or [{}])[0].get('configuration_id')}**"
+              + (f"; with the validated embedding correction: **{report['corrected_ranking'][0]['configuration_id']}**"
+                 if report.get("corrected_ranking") else "")), "", "## Stages", "",
              _md_table([{"stage": k, "status": report["stage_status"].get(k, "COMPLETED")} for k in report["stage_order"]],
                        ["stage", "status"]), "",
              "## Per topology", ""]
@@ -215,6 +237,14 @@ def write_report(run_dir: Path, report: dict) -> None:
             lines += ["## Reference-phase competition", "", f"Status: **{comp['status']}** — coverage: {comp['coverage']}", "",
                       _md_table(comp["mixing_energies"], ["configuration_id", "topology_id", "mixing_energy_eV_per_fu",
                                                           "versus_references"]), ""]
+        emb = ph.get("embedding")
+        if emb:
+            lines += ["## Embedding correction (finite-cluster subtractive)", "",
+                      f"Validation: **{emb['status']}** — {emb['stage']}. {emb['label']}.", "",
+                      f"`{emb['energy_expression']}`", "",
+                      _md_table([{"check": k, "status": v} for k, v in emb["checks"].items()], ["check", "status"]), "",
+                      _md_table(emb["corrections"], ["orbit_id", "record_type", "correction_status", "correction_eV_per_fu"]),
+                      ""]
         if ph.get("structure_validation"):
             lines += ["## Structural validation of finalists", "",
                       _md_table([{**f, "external_tools": ", ".join(f"{k}: {v}" for k, v in f["external_tools"].items())}

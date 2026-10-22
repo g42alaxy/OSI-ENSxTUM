@@ -13,7 +13,7 @@ Periodic DFT runs through an engine adapter (section 5). **PySCF** is the primar
 
 Passing results prove that the software path and its bookkeeping are correct. They say nothing about real MOF energetics. Everything not implemented is listed in [TODO.md](TODO.md).
 
-Python ≥ 3.10. The pipeline core is standard-library Python. The PySCF engine needs `pyscf`, `pyscf-dispersion` and `ase` (`pyproject.toml`); the GPU switch also needs `gpu4pyscf`; tests use pytest. About 7,400 lines of pipeline code and 2,450 lines of tests.
+Python ≥ 3.10. The pipeline core is standard-library Python. The PySCF engine needs `pyscf`, `pyscf-dispersion` and `ase` (`pyproject.toml`); the GPU switch also needs `gpu4pyscf`; tests use pytest. About 8,200 lines of pipeline code and 2,600 lines of tests.
 
 ```bash
 PYTHONPATH=src python3 -m mofpipe matrix --project mof_no_agent_fixture/project.json --out runs   # 6 runs + acceptance
@@ -44,6 +44,7 @@ flowchart LR
 | optimization | `optimization.py` | Exact enumeration of the 924 feasible states, certified optimal, keeping all degenerate minimizers. Each state is re-scored with the physical model and cross-checked against the encoding. Simulated annealing exists as an uncertified heuristic. Optional: branch-and-bound cross-check and a QAOA simulation benchmark (Milestone D, section 7). QPU: `DISABLED_BY_CONFIG`. | `SolverResult` |
 | candidates | `candidates.py` | Deduplicates by orbit within each graph. Keeps the best 5 unique orbits per graph plus every tie at the cutoff, with machine-readable selection reasons and degeneracy groups. | `CandidateSet`, `CandidatePool` |
 | evaluation | `electronic.py` | Sends the pool to the expensive-evaluation boundary: the fixture's `tools/mock_evaluator.py`, run **as a subprocess** so the learner never imports the oracle formula. Jobs have idempotency keys and states; responses are checked for identity, units, normalization, fidelity, provenance and correction arithmetic. Base and corrected energies are separate fields with separate fidelities, and these labels are never used for training. DFT, embedding, FCI, VQE and SQD are reported as not executed. | `CalculationResult` |
+| embedding | `embedding.py` | `DISABLED_BY_CONFIG`: fixture corrections are artificial values returned by the evaluator. Physical projects: section 8. | — |
 | ranking | `ranking.py` | Ranks the pool separately at base and corrected level, after compatibility checks. Exact ties are recorded as true degeneracies, and coverage is stated as "screened finalist pool, not a global certificate". Reference-phase competition: `INCOMPLETE`. | `RankingReport`, `CompetitionReport` |
 | supercell_checks | `orchestrator.py` | Abstract graphs have no supercells: `SKIPPED_NO_ATOMIC_GEOMETRY`. | — |
 | validation | `ranking.py` | MOFChecker, CrystalNets, Zeo++, phonons, PXRD/NMR: all `SKIPPED_NO_ATOMIC_GEOMETRY`, never "passed". | — |
@@ -179,7 +180,8 @@ Four deliberate bugs were injected one at a time, and the suite caught each:
 | model_selection | Grouped K-fold CV with a documented rank-deficiency gauge and optional ridge. CV RMSE and tie-aware low-energy recall against the declared tolerances; fewest effective parameters wins. The frozen holdout is evaluated once afterwards. | `configuration_model.py` |
 | encoding → candidates | Unchanged; they act on the CIF-derived `TopologySpec`. | |
 | evaluation | Each pool candidate goes through build → DFT. Labelled candidates come from the job cache. Failures become missing evaluations. | `orchestrator.py` |
-| ranking | DFT-only base ranking; differences within `target_relative_energy_tolerance` are ties. The corrected ranking is `DISABLED_BY_CONFIG`. | `ranking.py` |
+| embedding | `DISABLED_BY_CONFIG` unless `protocols.embedding` is declared (Milestone E, section 8). | `embedding.py` |
+| ranking | DFT-only base ranking; differences within `target_relative_energy_tolerance` are ties. A corrected ranking is added only when the embedding scheme is validated; otherwise it is reported as `DISABLED_BY_CONFIG` or `UNVALIDATED`. | `ranking.py` |
 | validation | Builder sanity, post-relaxation slot mapping and residual force/stress counts; external tools are `SKIPPED`. | `orchestrator.py` |
 
 **Toy result** (`tests/toy_framework.py`):
@@ -283,27 +285,65 @@ The mock energy has a node-mediated N–N term plus a weak orientation-dependent
 | Piece | Module | What it does |
 |---|---|---|
 | Quadratization (T03.4) | `encoding.py` | Policy `higher_order: "quadratize"`. Rosenberg substitution of cubic terms with one ancilla per pair and a stated penalty M = 2·Σ\|c\|. Verification minimizes over ancillas on all 2ⁿ decision strings. Fixture `higher_order`: ring12 11 ancillas, prism6 23, exact identity, feasible minimum, unchanged winner. |
-| Constraints and bounds (T03.5) | `encoding.py` | One count constraint per sublattice. Every encoding records the single-flip penalty bound L (λ > L certifies a feasible minimum without enumeration). One-hot QUBO for >2 species per slot, certified exhaustively on small instances. |
+| Constraints and bounds (T03.5) | `encoding.py` | One count constraint per sublattice (`TopologySpec.sublattice_counts`; enumeration honours it, branch and bound and QAOA refuse it). Every encoding records the single-flip penalty bound L (λ > L certifies a feasible minimum without enumeration). One-hot QUBO for >2 species per slot, certified exhaustively on small instances. |
 | Branch and bound (T04.1) | `optimization.py` | Exact fixed-count minimization in integer arithmetic. Certified on completion; at a node or time limit it returns the greedy-seeded incumbent with lower bound and gap. Optional cross-check against enumeration in the optimization stage. |
 | QAOA simulation (T04.2) | `qaoa.py` | Feasible-subspace statevector, XY exchange mixer over `pairs_distance_1`, Dicke initial state, seeded Nelder–Mead, shots, decode and re-evaluate. Full-register mixer-constraint check. Benchmark against exact and annealing across seeds. Recorded in the optimization stage as `QuantumBenchmark`; it never changes the candidate pool. |
-| Active space (T07.1) | `active_space.py` | PySCF RHF/ROHF → CASCI integrals → FCIDUMP + `ActiveSpaceArtifact` (h1, h2, E_core, spin counts, ordering, convention, hashes, orbital character). Bare systems only (`embedding: none`). |
+| Active space (T07.1) | `active_space.py` | PySCF RHF/ROHF → CASCI integrals → FCIDUMP + `ActiveSpaceArtifact` (h1, h2, E_core, spin counts, ordering, convention, hashes, orbital character). Bare systems only (`embedding: none`). One OpenMP thread, so identical inputs give a bitwise-identical artifact. |
 | Electronic solvers (T07.2) | `electronic_solvers.py` | Independent determinant ED, PySCF CASCI on the stored integrals, Jordan–Wigner UCCSD VQE (simulated), SQD from simulated samples with recovery; hardware SQD `BLOCKED`. All share one `hamiltonian_hash`. |
 
-**Published benchmark** (`benchmarks/h2_sto3g_szabo_ostlund.json`, CLI `electronic-benchmark`): minimal-basis H₂ at R = 1.4 a₀. HF is −1.11671 Ha against the published −1.1167, full CI −1.13728 against −1.1373. ED, CASCI, VQE and SQD agree; status `REPRODUCED`. On LiH CAS(4,4), ED and PySCF FCI agree to 10⁻¹⁴ Ha, UCCSD-VQE is 8×10⁻⁹ Ha above, and SQD stays variational.
+**Published benchmark** (`benchmarks/h2_sto3g_szabo_ostlund.json`, CLI `electronic-benchmark`): minimal-basis H₂ at R = 1.4 a₀. HF is −1.11671 Ha against the published −1.1167, full CI −1.13728 against −1.1373. ED, CASCI, VQE and SQD agree; status `REPRODUCED`, which also requires ED = CASCI within 10⁻⁸ Ha and no variational result below them. On LiH CAS(4,4), ED and PySCF FCI agree to 10⁻¹⁴ Ha, UCCSD-VQE is 8×10⁻⁹ Ha above, and SQD stays variational.
+
+**Review fixes (after the Milestone D commit):**
+- The active-space artifact ID changed between identical runs with several OpenMP threads (~10⁻¹⁴ Ha noise in the stored integrals). The export now runs on one thread.
+- `sublattice_counts` was read but never declared on `TopologySpec`, and nothing kept the solvers consistent with it. It is now a declared field; enumeration honours it and the solvers that assume one count refuse it.
+- QAOA protocols with `shots: 0` and similar crashed instead of being refused at intake.
+- QAOA `n_qubits` counted quadratization ancillas that are not in the circuit.
+- The electronic benchmark could report `REPRODUCED` with disagreeing solvers.
+- SQD samples did not record their source state.
 
 ### Tests (`test_milestone_d.py`, 8)
 - **Quadratization:** default policy still rejects a cubic QUBO; ancilla-minimized identity exact; feasible minimum; a wrong ancilla decode rule is caught.
-- **Constraints and one-hot:** penalty bound certification and its honest failure for λ = 0.001 eV; two-sublattice counts; one-hot encoded minimum equals the physical minimum and is feasible.
+- **Constraints and one-hot:** penalty bound certification and its honest failure for λ = 0.001 eV; two-sublattice counts (enumeration visits only the 400 states that meet both, branch and bound refuses); one-hot encoded minimum equals the physical minimum and is feasible.
 - **Branch and bound:** agrees with enumeration on six Hamiltonians, frustrated ones included; at a node limit, lower bound ≤ optimum ≤ incumbent.
 - **QAOA mixers:** exchange mixer preserves binary and one-hot constraints, the X mixer does not; exchanges stay within the multicomponent feasible set; a mislabelled coupling is caught as `ENCODING_DECODE_MISMATCH`.
 - **QAOA benchmark:** reaches the exact minimum for every seed, amplifies the optimum above 10× uniform, and records full provenance.
-- **Pipeline:** quadratize + branch and bound + QAOA on the fixture completes with the expected winner; a QPU protocol is refused.
+- **Pipeline:** quadratize + branch and bound + QAOA on the fixture completes with the expected winner; a QPU protocol and zero shots are refused.
 - **Electronic solvers:** LiH CAS(4,4) export is reproducible with an exact FCIDUMP round trip; ED = CASCI; VQE ≥ ED within 10⁻⁶; SQD variational; identical hash everywhere; embedding refused.
-- **Published H₂:** the CLI reproduces it within 10⁻⁴ Ha; VQE matches ED; hardware SQD is blocked; the correction is `UNVALIDATED`.
+- **Published H₂:** the CLI reproduces it within 10⁻⁴ Ha; VQE matches ED; hardware SQD is blocked; the correction is `UNVALIDATED`; the solver-consistency gate passes on one Hamiltonian hash.
 
-## 8. What the tests do not establish
+## 8. Milestone E: embedding correction and its feedback into the ranking
 
-- **MOF physics.** No real MOF structure, ML potential, embedding or quantum circuit is involved. The fixture corrections are artificial bookkeeping tests.
+Physical projects with `protocols.embedding` get an `embedding` stage between `evaluation` and `ranking` (`embedding.py`, `cluster_worker.py`).
+
+| Piece | What it does |
+|---|---|
+| Scheme | `finite_cluster_subtractive`, labelled a finite-cluster mechanical embedding, not WF-in-DFT. Frozen expression: E_corr[c] = E_PBC^low[c] + Σ_k m_k (E_high[C_k] − E_low[C_k]). The low level must be the periodic functional and dispersion; it is checked at intake. |
+| Regions | One per metal node of the relaxed cell: the node, `bond_hops` bonds out, and terminal atoms. Cut bonds are capped at declared distances. Regions must be disjoint (`OVERLAPPING_REGIONS`) and must not wrap the cell (`REGION_EXCEEDS_CELL`). Translation-equivalent clusters share one calculation. |
+| Cluster jobs | `ClusterBackend`: submit → job_status → collect, idempotent, budgeted by `max_active_space_jobs`. The engine is the PySCF worker (DFT, HF, MP2, CCSD, CCSD(T), or an active space solved by a T07.2 solver) or an external command. |
+| Assembly | `assemble_corrected_energy` returns `CorrectedEnergy`, an `UNVALIDATED` `EmbeddingBenchmarkResult`, or a `BlockedResult`. It blocks on a foreign geometry, incomplete node coverage, a missing subtraction or high-level term, or a mismatched high/low pair. |
+| Validation | `EmbeddingValidationReport`: high = low (|Δ| ≤ 10⁻⁸ Ha), balanced region inventory per formula unit, boundary convergence of the relative correction of the two lowest DFT candidates, and every declared reference benchmark `REPRODUCED`. |
+| Ranking | Only when VALIDATED: a corrected pooled ranking (fidelity `DFT:…+EMB:…`) next to the DFT one, with `ranking_changed_by_correction`. Otherwise the run stays DFT-only, and an unvalidated or blocked embedding never halts it. |
+
+**Reference benchmark** (`benchmarks/embedding_keto_enol_hf_ccsd.json`, CLI `embedding-benchmark`): propanal vs (E)-prop-1-en-1-ol at CCSD/6-31G with HF as the low level.
+- The region is the C–C–O fragment; the methyl group is capped.
+- Embedded relative-energy error: 0.25 mHa. HF alone is off by 2.36 mHa, against a 1.6 mHa tolerance.
+- A region covering the whole molecule reproduces the full CCSD energy to 10⁻¹⁴ Ha.
+- The reference is an independent full-molecule calculation on idealised geometries, not a published value. The Fe–MOF-74 workflow is still open.
+
+**Toy result** (SYNTHETIC: mock `pw.x` and mock cluster engine, 2×2×1 cell, four Zn nodes):
+- With `bond_hops: 1`, each region is ZnO₆ with six H caps, and the four regions are one cluster with multiplicity 4. The two-hop region of this one-cell-thick cell wraps around c, so the boundary study is `NOT_ASSESSABLE`. The scheme stays UNVALIDATED and the ranking DFT-only.
+- With `bond_hops: 0` and the reference benchmark, it is VALIDATED. The correction per formula unit is the same constant for every candidate, so the corrected order, ties and winner are the DFT ones.
+
+### Tests (`test_milestone_e.py`, 4)
+- **Unvalidated:** corrections stay `UNVALIDATED` benchmark artifacts; no corrected ranking; the checks report `NOT_ASSESSABLE` (`REGION_EXCEEDS_CELL`) and `NONE_DECLARED`; node coverage and disjoint regions are verified.
+- **Assembly guards:** the correction equals 4·(E_high − E_low) per formula unit exactly; re-evaluation reuses the cluster jobs. Blocking codes: missing low or high term, three of four nodes, a foreign geometry, a missing capping rule, a region wrapping the cell, overlapping regions.
+- **Validated feedback (PySCF):** VALIDATED, corrected ranking complete, constant shift with unchanged order and ties, every corrected number traces to its `CorrectedEnergy`. A low level that differs from the periodic functional is refused at intake.
+- **Benchmark (PySCF):** the CLI reproduces it. Exact limit, balance, embedded error < tolerance < low-level error.
+
+## 9. What the tests do not establish
+
+- **MOF physics.** No real MOF structure, ML potential or quantum circuit is involved. The fixture corrections are artificial bookkeeping tests.
+  - The embedding corrections in the toy runs come from a mock cluster engine. The real-chemistry check is a small-molecule benchmark against full CCSD; it validates the cut, capping and assembly, not the accuracy of any MOF correction. That needs a boundary study with real cluster calculations and a published reference such as Fe–MOF-74.
   - The PySCF engine is checked against independent PySCF calculations and finite differences on tiny cells (Si₂, H₂), and end to end on a SYNTHETIC formate toy. That shows the energies, forces and stresses it returns are the derivatives of the energy it reports. It does not show that a minimal GTH basis, a given cutoff or Gamma-point sampling is adequate for a MOF; that is what the convergence studies of a real project must establish.
   - The QE adapter is exercised only against a mock `pw.x`; its input/output handling still has to be checked on a real installation.
   - The GPU path follows the gpu4pyscf 1.8 API but has never run here: no CUDA device was available.

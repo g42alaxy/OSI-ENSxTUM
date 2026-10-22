@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from . import (acquisition, candidates, configuration_model, datasets, dft, encoding, framework, geometry_match,
+from . import (acquisition, candidates, configuration_model, datasets, dft, embedding, encoding, framework, geometry_match,
                optimization, ranking, references, refinement, structures, transfer, validation)
 from .contract import PipelineError, StageStatus, StopReason, content_hash, make_record
 from .electronic import SyntheticFixtureBackend, electronic_stage_status
@@ -18,7 +18,7 @@ from .store import RunStore
 #TODO: Task 10 — AiiDA WorkChain engine with CalcJobs for external DFT/QPU jobs; this local engine is the
 #TODO: development stand-in obeying the same interfaces. Concurrency (optimistic state commits) is not implemented.
 STAGES = ("intake", "structures", "screening", "labels", "refinement", "model_selection", "supercell_checks", "encoding",
-          "optimization", "candidates", "evaluation", "ranking", "validation", "report")
+          "optimization", "candidates", "evaluation", "embedding", "ranking", "validation", "report")
 # Missing inputs, resources or budget block a stage; they are not scientific failures.
 BLOCKING_CODES = {"BACKEND_UNAVAILABLE", "BUDGET_EXHAUSTED", "SCIENTIFIC_SPEC_MISSING", "DFT_SETTINGS_NOT_CONVERGED",
                   "UNSUPPORTED_DFT_PROTOCOL"}
@@ -218,6 +218,10 @@ class Pipeline:
                   "surrogate_vs_evaluated_base_max_abs_eV": float(max(residuals)) if residuals else None,
                   "electronic": electronic_stage_status(self.spec)}
         return StageOutcome(StageStatus.COMPLETED, arts, detail)
+
+    def _stage_embedding(self):
+        return StageOutcome(StageStatus.DISABLED_BY_CONFIG, detail={
+            "reason": "fixture corrections are artificial bookkeeping values returned by the evaluator, not embedding"})
 
     def _stage_ranking(self):
         pool_rows = [row for tid in self.spec.topologies for row in self.ctx[f"pool/{tid}"]["pool"]]
@@ -559,7 +563,7 @@ class Pipeline:
         return StageOutcome(status, arts, detail)
 
     def _physical_evaluation(self):
-        #TODO: Task 07 — embedding correction per candidate geometry once a validated assembler exists (T07.3).
+        # Embedding corrections of these results are assembled in the embedding stage (T07.3, embedding.py).
         arts, results, detail = {}, [], {"backend": self.backend.name, "labels_used_for_training": False,
                                           "relaxed_geometry_classes": {}}
         for tid, topo in self.spec.topologies.items():
@@ -585,6 +589,39 @@ class Pipeline:
                       dft_cache_hits=self.store.state["counters"].get("dft_cache_hits", 0),
                       electronic=electronic_stage_status(self.spec))
         return StageOutcome(StageStatus.COMPLETED, arts, detail)
+
+    def _physical_embedding(self):
+        """T07.3: finite-cluster subtractive corrections. A blocked or UNVALIDATED correction never stops the
+        DFT-only ranking, so this stage does not halt the run."""
+        if not self.spec.physical["protocols"].get("embedding"):
+            return StageOutcome(StageStatus.DISABLED_BY_CONFIG, detail={"ranking": "DFT-only"})
+        pool = [(row, self.ctx[f"calc/{row['orbit_id']}"]) for tid in self.spec.topologies
+                for row in self.ctx[f"pool/{tid}"]["pool"]]
+        try:
+            status, arts, detail = embedding.correct_pool(self.spec, embedding.ClusterBackend(self.spec, self.store), pool)
+        except PipelineError as exc:
+            status = StageStatus.BLOCKED if exc.code in BLOCKING_CODES else StageStatus.FAILED
+            return StageOutcome(status, detail={"error": exc.as_dict(), "ranking": "DFT-only (embedding did not finish)"})
+        return StageOutcome(status, arts, {**detail, "cluster_jobs": self.store.state["counters"].get("cluster_submissions", 0),
+                                           "cluster_cache_hits": self.store.state["counters"].get("cluster_cache_hits", 0)})
+
+    def _corrected_ranking(self, pool_rows, tol):
+        """Corrected pooled ranking from VALIDATED CorrectedEnergy records; None while the scheme is unvalidated."""
+        validation = self.ctx.get("embedding_validation")
+        if validation is None or validation["status"] != "VALIDATED":
+            return None, StageStatus.DISABLED_BY_CONFIG.value if validation is None else validation["status"]
+        merged = []
+        for row in pool_rows:
+            calc, corr = self.ctx[f"calc/{row['orbit_id']}"], self.ctx.get(f"correction/{row['orbit_id']}") or {}
+            if corr.get("record_type") == "CorrectedEnergy":
+                merged.append({**calc, **{k: corr[k] for k in ("corrected_energy_exact", "corrected_energy_eV",
+                                                               "corrected_fidelity", "comparison_group")},
+                               "correction_eV": corr["correction_eV_per_fu"], "correction_id": corr["artifact_id"]})
+            else:  # a failed DFT result keeps its status; a blocked correction is a missing corrected energy
+                merged.append({**calc, "status": calc["status"] if calc["status"] != "SUCCEEDED" else
+                               (corr.get("failure") or {}).get("code", "NOT_CORRECTED")})
+        corrected = ranking.rank_candidates(self.spec, pool_rows, merged, "corrected", tie_tolerance=tol)
+        return corrected, corrected["status"]
 
     def _reference_phases(self):
         """T09.2 reference set 'pure_endpoints': every slot of every topology holding one linker species."""
@@ -628,15 +665,23 @@ class Pipeline:
         else:
             competition = references.evaluate_reference_mixtures(self.spec, base)
         arts["competition"] = competition
-        status = StageStatus.COMPLETED if base["status"] == StageStatus.COMPLETED.value else StageStatus.INCOMPLETE
+        corrected, corrected_status = self._corrected_ranking(pool_rows, tol)
+        if corrected is not None:
+            arts["ranking/corrected"] = corrected
+        complete = base["status"] == corrected_status == StageStatus.COMPLETED.value if corrected else \
+            base["status"] == StageStatus.COMPLETED.value
+        status = StageStatus.COMPLETED if complete else StageStatus.INCOMPLETE
         return StageOutcome(status, arts,
-                            {"winning_topology": base["winning_topology"], "base_winning_topology": base["winning_topology"],
+                            {"winning_topology": (corrected or base)["winning_topology"],
+                             "base_winning_topology": base["winning_topology"],
                              "best_configuration": base["ranked"][0]["configuration_id"] if base["ranked"] else None,
                              "topologies_ranked": sorted({r["topology_id"] for r in base["ranked"]}),
                              "relaxed_equivalent_orbits": {r["orbit_id"]: classes[r["orbit_id"]] for r in base["ranked"]
                                                            if r["orbit_id"] in classes},
                              "missing_evaluations": base["missing_evaluations"], "failed_evaluations": base["failed_evaluations"],
-                             "competition": competition["status"], "corrected_ranking": StageStatus.DISABLED_BY_CONFIG.value})
+                             "competition": competition["status"], "competition_level": "base (DFT); references are not corrected",
+                             "corrected_ranking": corrected_status,
+                             "ranking_changed_by_correction": ranking.ranking_order_changed(base, corrected) if corrected else None})
 
     def _physical_validation(self):
         geometries = {v["decoration_id"]: v for k, v in self.ctx.items() if k.startswith("geometry/")}

@@ -1,5 +1,6 @@
 """Milestone D: quadratization (T03.4), constraints and one-hot encodings (T03.5), branch and bound (T04.1),
 QAOA simulation (T04.2), active-space export and electronic solvers on a published benchmark (T07.1/T07.2)."""
+import dataclasses
 import json
 from fractions import Fraction
 
@@ -52,14 +53,15 @@ def test_penalty_bound_sublattice_counts_and_one_hot():
     assert weak["penalty_bound"]["certified_by_bound"] is False
     # The bound is sufficient, not necessary: the report must say exhaustive enumeration was needed.
     assert "does not certify" in encoding.verify_encoding(small, topo, ham, weak)["penalty_certification"]
-    # Two sublattices with their own counts: the penalised minimum must satisfy both.
-    object.__setattr__(topo, "sublattice_counts", ((tuple(range(6)), 3), (tuple(range(6, 12)), 3)))
-    try:
-        split = encoding.compile_encoding(spec, topo, ham, "QUBO")
-        assert [c["k"] for c in split["count_constraints"]] == [3, 3]
-        assert encoding.verify_encoding(spec, topo, ham, split)["status"] == "COMPLETED"
-    finally:
-        object.__setattr__(topo, "sublattice_counts", None)
+    # Two sublattices with their own counts: the penalised minimum must satisfy both, exact enumeration visits
+    # only states that satisfy both, and solvers that assume one global count refuse.
+    split_topo = dataclasses.replace(topo, sublattice_counts=((tuple(range(6)), 3), (tuple(range(6, 12)), 3)))
+    split = encoding.compile_encoding(spec, split_topo, ham, "QUBO")
+    assert [c["k"] for c in split["count_constraints"]] == [3, 3]
+    assert encoding.verify_encoding(spec, split_topo, ham, split)["status"] == "COMPLETED"
+    assert optimization.exact_enumeration(spec, split_topo, ham, split)["n_feasible"] == 20 * 20
+    with pytest.raises(PipelineError, match="UNSUPPORTED_SUBLATTICE_CONSTRAINTS"):
+        optimization.branch_and_bound(spec, split_topo, ham)
     # One-hot: 4 slots on a ring, 3 species with counts 2/1/1, nearest-neighbour like-species penalty.
     ring = [(0, 1), (1, 2), (2, 3), (3, 0)]
     physical = {((i, a), (j, a)): "0.1" for i, j in ring for a in range(3)}
@@ -144,7 +146,9 @@ def test_pipeline_quantum_benchmark_with_quadratization(tmp_path):
     assert all(opt["cross_checks"][t]["agrees_with_exact"] for t in ("ring12", "prism6"))
     assert opt["quantum"]["qaoa_simulation"] == "COMPLETED" and "QAOA simulation" not in report["not_executed"]
     bad = load_project(PROJECT, overrides={"optimizer": {"quantum_enabled": True, "quantum_protocol": {"kind": "qpu"}}})
-    assert "SCIENTIFIC_SPEC_MISSING" in {e["code"] for e in validate_project(bad)["errors"]}
+    assert {"SCIENTIFIC_SPEC_MISSING", "UNSUPPORTED_QUANTUM_BACKEND"} <= {e["code"] for e in validate_project(bad)["errors"]}
+    zero_shots = load_project(PROJECT, overrides={"optimizer": {"quantum_enabled": True, "quantum_protocol": {**protocol, "shots": 0}}})
+    assert "SCIENTIFIC_SPEC_MISSING" in {e["code"] for e in validate_project(zero_shots)["errors"]}
 
 
 def test_electronic_solvers_agree_on_identical_tiny_hamiltonian():
@@ -180,3 +184,4 @@ def test_published_h2_benchmark_is_reproduced(tmp_path):
     assert abs(report["comparisons"]["hf_vs_published_Ha"]) <= 1e-4
     assert all(abs(d) < 1e-8 for d in report["comparisons"]["vqe_simulation_minus_exact_Ha"])
     assert report["solver_status"]["sqd_hardware"] == "BLOCKED" and report["correction_status"] == "UNVALIDATED"
+    assert report["solver_consistency"]["consistent"] and len(report["solver_consistency"]["hamiltonian_hashes"]) == 1
