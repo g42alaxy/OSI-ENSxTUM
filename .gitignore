@@ -8,3 +8,5 @@ runs/
 controls.yaml
 data/reference/
 .aiida/
+TODO.md
+IMPLEMENTATION.md
